@@ -47,7 +47,7 @@ import { PlanDiffViewer } from './components/plan-diff/PlanDiffViewer';
 import type { PlanDiffMode } from './components/plan-diff/PlanDiffModeSwitcher';
 import { formatFeedback } from './utils/feedback';
 import { LoadingScreen } from './components/LoadingScreen';
-import { ToolView } from './components/ToolView';
+
 
 const PLAN_CONTENT = `# Implementation Plan: Real-time Collaboration
 
@@ -383,8 +383,6 @@ const App: React.FC = () => {
   });
   const [uiPrefs, setUiPrefs] = useState(() => getUIPreferences());
   const [isApiMode, setIsApiMode] = useState(false);
-  const [toolName, setToolName] = useState<string | null>(null);
-  const [toolArgs, setToolArgs] = useState<Record<string, unknown> | null>(null);
   const [origin, setOrigin] = useState<'claude-code' | 'opencode' | 'pi' | null>(null);
   const [globalAttachments, setGlobalAttachments] = useState<ImageAttachment[]>([]);
   const [annotateMode, setAnnotateMode] = useState(false);
@@ -496,62 +494,74 @@ const App: React.FC = () => {
     saveEditorMode(mode);
   };
 
-  // Check if we're in API mode (served from Bun hook server)
+  // Check if we're in API mode (served from hook server)
   // Skip if we loaded from a shared URL
+  // Retries up to 5 times (total ~2.5s) to handle race with server startup
   useEffect(() => {
     if (isLoadingShared) return; // Wait for share check to complete
     if (isSharedSession) return; // Already loaded from share
 
-    fetch('/api/plan')
-      .then(res => {
+    let cancelled = false;
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 500;
+
+    const applyPlanData = (data: { plan: string; origin?: 'claude-code' | 'opencode' | 'pi'; mode?: 'annotate'; sharingEnabled?: boolean; shareBaseUrl?: string; repoInfo?: { display: string; branch?: string }; previousPlan?: string | null; versionInfo?: { version: number; totalVersions: number; project: string } }) => {
+      if (cancelled) return;
+      setMarkdown(data.plan);
+      setIsApiMode(true);
+      if (data.mode === 'annotate') {
+        setAnnotateMode(true);
+      }
+      if (data.sharingEnabled !== undefined) {
+        setSharingEnabled(data.sharingEnabled);
+      }
+      if (data.shareBaseUrl) {
+        setShareBaseUrl(data.shareBaseUrl);
+      }
+      if (data.repoInfo) {
+        setRepoInfo(data.repoInfo);
+      }
+      if (data.previousPlan !== undefined) {
+        setPreviousPlan(data.previousPlan);
+      }
+      if (data.versionInfo) {
+        setVersionInfo(data.versionInfo);
+      }
+      if (data.origin) {
+        setOrigin(data.origin);
+        if (data.origin === 'claude-code' && needsPermissionModeSetup()) {
+          setShowPermissionModeSetup(true);
+        } else if (needsUIFeaturesSetup()) {
+          setShowUIFeaturesSetup(true);
+        } else if (needsPlanDiffMarketingDialog()) {
+          setShowPlanDiffMarketing(true);
+        }
+        setPermissionMode(getPermissionModeSettings().mode);
+      }
+    };
+
+    const fetchPlan = async (attempt: number): Promise<void> => {
+      try {
+        const res = await fetch('/api/plan');
         if (!res.ok) throw new Error('Not in API mode');
-        return res.json();
-      })
-      .then((data: { plan: string; toolName?: string; toolArgs?: Record<string, unknown>; origin?: 'claude-code' | 'opencode' | 'pi'; mode?: 'annotate'; sharingEnabled?: boolean; shareBaseUrl?: string; repoInfo?: { display: string; branch?: string }; previousPlan?: string | null; versionInfo?: { version: number; totalVersions: number; project: string } }) => {
-        setMarkdown(data.plan);
-        setIsApiMode(true);
-        setToolName(typeof data.toolName === 'string' ? data.toolName : null);
-        setToolArgs(data.toolArgs && typeof data.toolArgs === 'object' ? data.toolArgs : null);
-        if (data.mode === 'annotate') {
-          setAnnotateMode(true);
+        const data = await res.json();
+        applyPlanData(data);
+        setIsLoading(false);
+      } catch {
+        if (cancelled) return;
+        if (attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+          if (!cancelled) await fetchPlan(attempt + 1);
+        } else {
+          // Not in API mode - use default content
+          setIsApiMode(false);
+          setIsLoading(false);
         }
-        if (data.sharingEnabled !== undefined) {
-          setSharingEnabled(data.sharingEnabled);
-        }
-        if (data.shareBaseUrl) {
-          setShareBaseUrl(data.shareBaseUrl);
-        }
-        if (data.repoInfo) {
-          setRepoInfo(data.repoInfo);
-        }
-        // Capture plan version history data
-        if (data.previousPlan !== undefined) {
-          setPreviousPlan(data.previousPlan);
-        }
-        if (data.versionInfo) {
-          setVersionInfo(data.versionInfo);
-        }
-        if (data.origin) {
-          setOrigin(data.origin);
-          // For Claude Code, check if user needs to configure permission mode
-          if (data.origin === 'claude-code' && needsPermissionModeSetup()) {
-            setShowPermissionModeSetup(true);
-          } else if (needsUIFeaturesSetup()) {
-            setShowUIFeaturesSetup(true);
-          } else if (needsPlanDiffMarketingDialog()) {
-            setShowPlanDiffMarketing(true);
-          }
-          // Load saved permission mode preference
-          setPermissionMode(getPermissionModeSettings().mode);
-        }
-      })
-      .catch(() => {
-        // Not in API mode - use default content
-        setIsApiMode(false);
-        setToolName(null);
-        setToolArgs(null);
-      })
-      .finally(() => setIsLoading(false));
+      }
+    };
+
+    fetchPlan(1);
+    return () => { cancelled = true; };
   }, [isLoadingShared, isSharedSession]);
 
   useEffect(() => {
@@ -562,8 +572,6 @@ const App: React.FC = () => {
       try {
         const newPlanData = JSON.parse(event.data) as {
           plan?: string;
-          toolName?: string;
-          toolArgs?: Record<string, unknown>;
           previousPlan?: string | null;
           versionInfo?: VersionInfo | null;
         };
@@ -571,8 +579,6 @@ const App: React.FC = () => {
         if (typeof newPlanData.plan === 'string') {
           setMarkdown(newPlanData.plan);
         }
-        setToolName(typeof newPlanData.toolName === 'string' ? newPlanData.toolName : null);
-        setToolArgs(newPlanData.toolArgs && typeof newPlanData.toolArgs === 'object' ? newPlanData.toolArgs : null);
         if (newPlanData.previousPlan !== undefined) {
           setPreviousPlan(newPlanData.previousPlan);
         }
@@ -1373,15 +1379,7 @@ const App: React.FC = () => {
                 />
               ) : (
                 <>
-                  {isApiMode && toolName && toolArgs && (
-                    <ToolView
-                      toolName={toolName}
-                      toolArgs={toolArgs}
-                      className="mb-4"
-                    />
-                  )}
-
-                  {(!isApiMode || !toolName || markdown.trim().length > 0) && (
+                  {(
                     <Viewer
                       key={linkedDocHook.isActive ? `doc:${linkedDocHook.filepath}` : 'plan'}
                       ref={viewerRef}

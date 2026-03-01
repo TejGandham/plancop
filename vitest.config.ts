@@ -16,21 +16,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: [
-        'server/mode.ts',
-        'server/config.ts',
-        'server/session.ts',
-        'server/enrichment.ts',
-        'server/hook.ts',
         'server/storage-versions.ts',
         'src/types/hook.ts',
         'ui/src/utils/feedback.ts',
         'ui/src/utils/parser.ts',
         'ui/src/utils/annotationHelpers.ts',
         'ui/src/utils/planDiffEngine.ts',
-        'ui/src/components/ToolView.tsx',
-        'ui/src/components/EditToolView.tsx',
-        'ui/src/components/CreateToolView.tsx',
-        'ui/src/components/BashToolView.tsx'
       ],
       exclude: ['node_modules', 'dist', '**/*.test.ts', '**/*.test.tsx'],
       thresholds: {

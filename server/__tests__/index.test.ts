@@ -1,4 +1,5 @@
 // @ts-nocheck
+// @vitest-environment node
 import { afterEach, describe, expect, it } from "vitest";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -16,29 +17,25 @@ type RunningServer = {
 
 const running: RunningServer[] = [];
 
-function startServer(planInput?: string, extraEnv: Record<string, string> = {}): Promise<RunningServer> {
+function startServer(planContent?: string): Promise<RunningServer> {
   return new Promise((resolve, reject) => {
     const homeDir = mkdtempSync(join(tmpdir(), "plancop-index-test-home-"));
-    const child = spawn("npx", ["tsx", "server/index.ts"], {
+    const stdinPayload = JSON.stringify({
+      tool_input: { plan: planContent ?? "# Test Plan\n\nSome content" },
+      permission_mode: "default",
+    });
+
+    const child = spawn("bun", ["run", "server/index.ts"], {
       cwd: process.cwd(),
       env: {
         ...process.env,
         HOME: homeDir,
-        ...extraEnv,
-        PLAN_INPUT:
-          planInput ??
-          JSON.stringify({
-            timestamp: Date.now(),
-            cwd: process.cwd(),
-            toolName: "edit",
-            toolArgs: JSON.stringify({
-              file: "README.md",
-              old_string: "old",
-              new_string: "new",
-            }),
-          }),
       },
     });
+
+    // Write stdin payload and close
+    child.stdin.write(stdinPayload);
+    child.stdin.end();
 
     let stdout = "";
     let stderr = "";
@@ -50,7 +47,8 @@ function startServer(planInput?: string, extraEnv: Record<string, string> = {}):
 
     child.stderr.on("data", (chunk: unknown) => {
       stderr += String(chunk);
-      const match = stderr.match(/PLANCOP_PORT:(\d+)/);
+      // Server prints "plancop: Review UI at http://localhost:PORT"
+      const match = stderr.match(/http:\/\/localhost:(\d+)/);
       if (match && !settled) {
         settled = true;
         const server: RunningServer = {
@@ -109,13 +107,13 @@ afterEach(async () => {
             if (!server.process.killed) {
               server.process.kill("SIGKILL");
             }
-          }, 500);
+          }, 2000);
         })
     )
   );
 });
 
-describe("server/index.ts", () => {
+describe("server/index.ts (ExitPlanMode)", () => {
   it("serves GET /", async () => {
     const server = await startServer();
     const response = await fetch(`http://127.0.0.1:${server.port}/`);
@@ -133,92 +131,24 @@ describe("server/index.ts", () => {
     expect(await response.json()).toMatchObject({ ok: true });
   });
 
-  it("serves SSE stream on GET /api/events", async () => {
-    const server = await startServer(undefined, { PLANCOP_SESSION_MODE: "persistent" });
-    const response = await fetch(`http://127.0.0.1:${server.port}/api/events`);
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toContain("text/event-stream");
-    await response.body?.cancel();
-  });
-
-  it("handles POST /api/push-plan and returns decision", async () => {
-    const server = await startServer(undefined, { PLANCOP_SESSION_MODE: "persistent" });
-    const pushedInput = {
-      timestamp: 456,
-      cwd: "/tmp/project",
-      toolName: "create",
-      toolArgs: JSON.stringify({ file: "next.md", content: "# Next Plan" }),
-    };
-
-    const pushPromise = fetch(`http://127.0.0.1:${server.port}/api/push-plan`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(pushedInput),
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    const planResponse = await fetch(`http://127.0.0.1:${server.port}/api/plan`);
-    const planBody = await planResponse.json();
-    expect(planBody).toMatchObject({ plan: "# Next Plan", timestamp: 456 });
-
-    await fetch(`http://127.0.0.1:${server.port}/api/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-
-    const pushResponse = await pushPromise;
-    expect(pushResponse.status).toBe(200);
-    expect(await pushResponse.json()).toEqual({ permissionDecision: "allow" });
-  });
-
-  it("serves GET /api/plan", async () => {
-    const server = await startServer(
-      JSON.stringify({
-        timestamp: 123,
-        cwd: "/tmp/project",
-        toolName: "create",
-        toolArgs: JSON.stringify({ file: "plan.md", content: "# New Plan" }),
-      })
-    );
-
+  it("serves GET /api/plan with ExitPlanMode data", async () => {
+    const server = await startServer("# My Plan\n\nDo the thing");
     const response = await fetch(`http://127.0.0.1:${server.port}/api/plan`);
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({
-      plan: "# New Plan",
-      toolName: "create",
-      cwd: "/tmp/project",
-      timestamp: 123,
-    });
-    expect(body.toolArgs).toEqual({
-      file: "plan.md",
-      content: "# New Plan",
-      language: "markdown",
+      plan: "# My Plan\n\nDo the thing",
+      origin: "claude-code",
+      permissionMode: "default",
+      sharingEnabled: true,
     });
   });
 
-  it("serves GET /api/versions and GET /api/version/:id", async () => {
-    const server = await startServer();
-    const versionsResponse = await fetch(`http://127.0.0.1:${server.port}/api/versions`);
-    const versionResponse = await fetch(`http://127.0.0.1:${server.port}/api/version/1`);
-
-    expect(versionsResponse.status).toBe(200);
-    expect(await versionsResponse.json()).toEqual({ versions: [] });
-
-    expect(versionResponse.status).toBe(200);
-    expect(await versionResponse.json()).toEqual({ version: null });
-  });
-
-  it("handles POST /api/approve and exits with allow decision", async () => {
+  it("handles POST /api/approve and outputs PermissionRequest allow", async () => {
     const server = await startServer();
     const response = await fetch(`http://127.0.0.1:${server.port}/api/approve`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
     });
 
     expect(response.status).toBe(200);
@@ -226,15 +156,22 @@ describe("server/index.ts", () => {
 
     const code = await server.waitForExit();
     expect(code).toBe(0);
-    expect(JSON.parse(server.getStdout().trim())).toEqual({ permissionDecision: "allow" });
+
+    const output = JSON.parse(server.getStdout().trim());
+    expect(output).toEqual({
+      hookSpecificOutput: {
+        hookEventName: "PermissionRequest",
+        decision: { behavior: "allow" },
+      },
+    });
   });
 
-  it("handles POST /api/deny and exits with deny decision", async () => {
+  it("handles POST /api/deny and outputs PermissionRequest deny", async () => {
     const server = await startServer();
     const response = await fetch(`http://127.0.0.1:${server.port}/api/deny`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason: "Bad plan" }),
+      body: JSON.stringify({ reason: "Needs changes" }),
     });
 
     expect(response.status).toBe(200);
@@ -242,20 +179,34 @@ describe("server/index.ts", () => {
 
     const code = await server.waitForExit();
     expect(code).toBe(0);
-    expect(JSON.parse(server.getStdout().trim())).toEqual({
-      permissionDecision: "deny",
-      permissionDecisionReason: "Bad plan",
+
+    const output = JSON.parse(server.getStdout().trim());
+    expect(output).toEqual({
+      hookSpecificOutput: {
+        hookEventName: "PermissionRequest",
+        decision: { behavior: "deny", message: "Needs changes" },
+      },
     });
   });
 
-  it("handles OPTIONS preflight with 204 and CORS headers", async () => {
+  it("handles POST /api/feedback same as /api/deny", async () => {
     const server = await startServer();
-    const response = await fetch(`http://127.0.0.1:${server.port}/api/plan`, {
-      method: "OPTIONS",
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feedback: "Fix the auth section" }),
     });
-    expect(response.status).toBe(204);
-    expect(response.headers.get("access-control-allow-origin")).toBe("*");
-    expect(response.headers.get("access-control-allow-methods")).toContain("GET");
+
+    expect(response.status).toBe(200);
+
+    const code = await server.waitForExit();
+    expect(code).toBe(0);
+
+    const output = JSON.parse(server.getStdout().trim());
+    expect(output.hookSpecificOutput.decision).toEqual({
+      behavior: "deny",
+      message: "Fix the auth section",
+    });
   });
 
   it("returns 404 for unknown routes", async () => {
@@ -265,76 +216,13 @@ describe("server/index.ts", () => {
     expect(await response.json()).toEqual({ error: "Not found" });
   });
 
-  it("rejects POST /api/push-plan with 400 in ephemeral mode", async () => {
-    const server = await startServer();
-    const response = await fetch(`http://127.0.0.1:${server.port}/api/push-plan`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        timestamp: Date.now(),
-        cwd: "/tmp",
-        toolName: "edit",
-        toolArgs: "{}",
-      }),
-    });
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: "push-plan is only available in persistent mode",
-    });
-  });
-
-  it("returns 409 for concurrent POST /api/push-plan while one is pending", async () => {
-    const server = await startServer(undefined, {
-      PLANCOP_SESSION_MODE: "persistent",
-    });
-    const planPayload = JSON.stringify({
-      timestamp: Date.now(),
-      cwd: "/tmp/project",
-      toolName: "create",
-      toolArgs: JSON.stringify({ file: "plan.md", content: "# Plan" }),
-    });
-
-    // First push-plan — will block waiting for a decision
-    const firstPush = fetch(`http://127.0.0.1:${server.port}/api/push-plan`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: planPayload,
-    });
-
-    // Give the first push-plan time to be registered on the server
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Second concurrent push-plan should be rejected
-    const secondResponse = await fetch(
-      `http://127.0.0.1:${server.port}/api/push-plan`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: planPayload,
-      }
-    );
-    expect(secondResponse.status).toBe(409);
-    expect(await secondResponse.json()).toEqual({
-      error: "A plan is already awaiting decision",
-    });
-
-    // Clean up: approve the pending first push so the server can exit
-    await fetch(`http://127.0.0.1:${server.port}/api/approve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    await firstPush;
-  });
-
-  it("exits with code 1 when PLAN_INPUT is invalid JSON", async () => {
-    const child = spawn("npx", ["tsx", "server/index.ts"], {
+  it("exits with code 1 when stdin has invalid JSON", async () => {
+    const child = spawn("bun", ["run", "server/index.ts"], {
       cwd: process.cwd(),
-      env: {
-        ...process.env,
-        PLAN_INPUT: "{invalid-json",
-      },
     });
+
+    child.stdin.write("{invalid-json");
+    child.stdin.end();
 
     let stderr = "";
     child.stderr.on("data", (chunk: unknown) => {
@@ -346,6 +234,27 @@ describe("server/index.ts", () => {
     });
 
     expect(exitCode).toBe(1);
-    expect(stderr).toContain("plancop server error:");
-  }, 30_000);
+    expect(stderr).toContain("plancop:");
+  }, 15_000);
+
+  it("exits with code 1 when plan is empty", async () => {
+    const child = spawn("bun", ["run", "server/index.ts"], {
+      cwd: process.cwd(),
+    });
+
+    child.stdin.write(JSON.stringify({ tool_input: { plan: "" } }));
+    child.stdin.end();
+
+    let stderr = "";
+    child.stderr.on("data", (chunk: unknown) => {
+      stderr += String(chunk);
+    });
+
+    const exitCode = await new Promise<number | null>((resolve) => {
+      child.once("exit", (code) => resolve(code));
+    });
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("plancop:");
+  }, 15_000);
 });

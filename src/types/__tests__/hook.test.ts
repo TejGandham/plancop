@@ -1,36 +1,37 @@
-import { describe, it, expect } from 'vitest';
-import { isValidPreToolUseInput } from '../hook.js';
+import { describe, it, expect } from "vitest";
+import { isValidExitPlanModeInput } from "../hook.js";
 
-describe('isValidPreToolUseInput', () => {
-  it('accepts valid hook input', () => {
-    expect(isValidPreToolUseInput({
-      timestamp: 1704614600000,
-      cwd: '/home/user/project',
-      toolName: 'edit',
-      toolArgs: '{"file":"src/app.ts","old_string":"foo","new_string":"bar"}'
-    })).toBe(true);
+describe("isValidExitPlanModeInput", () => {
+  it("accepts valid ExitPlanMode input", () => {
+    expect(
+      isValidExitPlanModeInput({
+        tool_input: { plan: "# My Plan" },
+        permission_mode: "default",
+      })
+    ).toBe(true);
   });
 
-  it('rejects missing timestamp', () => {
-    expect(isValidPreToolUseInput({ cwd: '/tmp', toolName: 'edit', toolArgs: '{}' })).toBe(false);
+  it("accepts input without permission_mode", () => {
+    expect(
+      isValidExitPlanModeInput({ tool_input: { plan: "# Plan" } })
+    ).toBe(true);
   });
 
-  it('rejects missing cwd', () => {
-    expect(isValidPreToolUseInput({ timestamp: 0, toolName: 'edit', toolArgs: '{}' })).toBe(false);
+  it("rejects null", () => {
+    expect(isValidExitPlanModeInput(null)).toBe(false);
   });
 
-  it('rejects toolArgs as object (must be string — double-parse gotcha)', () => {
-    expect(isValidPreToolUseInput({
-      timestamp: 0, cwd: '/tmp', toolName: 'edit',
-      toolArgs: { file: 'foo' }  // WRONG: object instead of JSON string
-    })).toBe(false);
+  it("rejects missing tool_input", () => {
+    expect(isValidExitPlanModeInput({ foo: "bar" })).toBe(false);
   });
 
-  it('rejects null', () => {
-    expect(isValidPreToolUseInput(null)).toBe(false);
+  it("rejects missing plan field", () => {
+    expect(isValidExitPlanModeInput({ tool_input: {} })).toBe(false);
   });
 
-  it('rejects empty object', () => {
-    expect(isValidPreToolUseInput({})).toBe(false);
+  it("rejects non-string plan", () => {
+    expect(
+      isValidExitPlanModeInput({ tool_input: { plan: 123 } })
+    ).toBe(false);
   });
 });

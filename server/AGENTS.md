@@ -1,26 +1,16 @@
-# server/ — HTTP Review Server
+# server/ — Bun Review Server
 
-Zero-dependency Node.js HTTP server. Uses only `node:` built-ins. Spawned by `scripts/plan-review.sh` hook or by `mcp/server.js` internally.
+Bun-based HTTP server. Uses `Bun.serve()` with zero npm dependencies. Reads ExitPlanMode hook input from stdin, serves review UI, outputs PermissionRequest decision to stdout.
 
 ## Structure
 
 ```
 server/
-├── index.ts              # Main server — routes, SSE, lifecycle (418 LOC, @ts-nocheck)
-├── enrichment.ts         # enrichPlanData() — language detection, tool arg enrichment
-├── hook.ts               # parsePreToolUseInput(), parseToolArgs(), getDecisionJSON()
-├── mode.ts               # shouldIntercept() — ReadonlySet<string> for tool filtering
-├── session.ts            # PID file CRUD, inactivity timeout (INACTIVITY_TIMEOUT_MS = 5min)
+├── index.ts              # Main server — Bun.serve(), stdin/stdout, ~170 LOC
 ├── storage-versions.ts   # savePlan(), getVersions(), getVersion() — ~/.plancop/history/
-├── config.ts             # loadConfig() — reads .plancop/config.json
 ├── package.json          # { "type": "module" } — DO NOT DELETE (ESM resolution)
 └── __tests__/
-    ├── index.test.ts     # Child-process spawn tests (@ts-nocheck)
-    ├── enrichment.test.ts
-    ├── hook.test.ts
-    ├── mode.test.ts
-    ├── session.test.ts
-    ├── config.test.ts
+    ├── index.test.ts     # Child-process spawn tests (@ts-nocheck, @vitest-environment node)
     └── storage-versions.test.ts
 ```
 
@@ -28,71 +18,96 @@ server/
 
 | Method | Path | Handler | Notes |
 |--------|------|---------|-------|
-| GET | `/` | writeHtml() | Serves ui/dist/index.html |
-| GET | `/api/status` | writeJson() | `{ ok: true, persistentMode }` |
-| GET | `/api/plan` | writeJson() | Returns enriched plan data; saves to history on first call |
-| GET | `/api/events` | SSE stream | Persistent mode only — pushes new plans to connected UIs |
-| GET | `/api/versions` | writeJson() | Plan version history list |
-| GET | `/api/version/:id` | writeJson() | Single version content |
-| POST | `/api/push-plan` | readBody() | Persistent mode: accept new plan. 400 if ephemeral, 409 if plan pending |
-| POST | `/api/approve` | settleReview() | Resolves decision Promise with `permissionDecision: "allow"` |
-| POST | `/api/deny` | readBody() → settleReview() | Resolves with `permissionDecision: "deny"` + reason |
+| GET | `/` | Serves HTML | ui/dist/index.html (single-file build) |
+| GET | `/api/status` | JSON | `{ ok: true }` |
+| GET | `/api/plan` | JSON | Returns plan data with origin, permissionMode, sharingEnabled |
+| GET | `/api/versions` | JSON | Plan version history list |
+| GET | `/api/version/:id` | JSON | Single version content |
+| POST | `/api/approve` | JSON | Resolves decision as `allow`, exits |
+| POST | `/api/deny` | JSON | Resolves decision as `deny` with reason, exits |
+| POST | `/api/feedback` | JSON | Same as deny — sends feedback as deny message |
 | OPTIONS | `*` | 204 | CORS preflight |
 | * | `*` | 404 | `{ error: "Not found" }` |
 
-## Key Functions
+## Data Flow
 
-| Function | Purpose |
-|----------|---------|
-| `main()` | Entry point. Loads hook input, creates server, waits for decision |
-| `createReviewState(hookInput)` | Creates state bag with enriched plan data + decision Promise |
-| `settleReview(state, decision)` | One-shot resolve. `settled` flag prevents double-call |
-| `parseHookInput(input)` | Validates PLAN_INPUT JSON shape |
-| `loadInitialHookInput(required)` | Reads `process.env.PLAN_INPUT`, crashes if missing+required |
-| `readBody(req)` | Promise wrapper for request body |
-| `writeJson(res, status, body)` | JSON response with CORS headers |
-| `broadcastPlan(data)` | Push to all SSE clients (persistent mode) |
-| `shutdown(exitCode)` | Graceful shutdown with 500ms force-exit timeout |
+```
+Claude Code ──ExitPlanMode──▶ stdin (JSON) ──▶ server/index.ts
+                                                    │
+                                              Bun.serve({ port: 0 })
+                                              Opens browser
+                                                    │
+                                              Browser UI (React)
+                                              GET /api/plan
+                                              POST /api/approve | /api/deny | /api/feedback
+                                                    │
+                                              Decision → stdout (PermissionRequest JSON)
+                                              Server exits
+```
+
+## Input/Output Format
+
+**stdin** (ExitPlanMode event):
+```json
+{
+  "tool_input": { "plan": "# Plan markdown..." },
+  "permission_mode": "default"
+}
+```
+
+**stdout** (PermissionRequest decision):
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PermissionRequest",
+    "decision": { "behavior": "allow" }
+  }
+}
+```
+
+Or with deny + feedback:
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PermissionRequest",
+    "decision": { "behavior": "deny", "message": "Fix the auth section" }
+  }
+}
+```
 
 ## Where to Look
 
-| Task | File | Lines |
-|------|------|-------|
-| Add new API route | index.ts | Inside createServer callback (~L207) |
-| Change CORS policy | index.ts | CORS_HEADERS constant (~L35) |
-| Add tool enrichment | enrichment.ts | enrichPlanData() |
-| Change interception list | mode.ts | AUTO_TOOLS, AGGRESSIVE_TOOLS sets |
-| Modify plan storage | storage-versions.ts | savePlan(), PLANCOP_DIR |
-| Change session timeout | session.ts | INACTIVITY_TIMEOUT_MS |
-| Add config option | config.ts | DEFAULT_CONFIG, loadConfig() |
+| Task | File |
+|------|------|
+| Add new API route | index.ts — inside `Bun.serve({ fetch })` handler |
+| Change CORS policy | index.ts — `corsHeaders` object |
+| Modify plan storage | storage-versions.ts — `savePlan()`, `PLANCOP_DIR` |
 
-## Conventions (server-specific)
+## Conventions
 
-- **Zero npm deps** — Only `node:http`, `node:fs`, `node:path`, `node:os`, `node:crypto`. Adding deps is forbidden.
-- **writeJson/writeHtml** — All responses go through these helpers. Never write to `res` directly.
-- **readBody()** — Always use for POST body parsing. Returns Promise\<string\>.
-- **ReadonlySet** — Tool lists are `ReadonlySet<string>` for immutability.
-- **Error returns** — `parseToolArgs()` returns `ToolArgsParseError` object, never throws.
+- **Bun runtime** — Uses `Bun.serve()`, `Bun.file()`, `Bun.spawn()`, `Bun.stdin`
+- **Zero npm deps** — Server uses only Bun built-ins. No Express, no npm packages.
+- **Ephemeral only** — One decision per invocation. Server starts, waits, outputs, exits.
+- **Promise-based decision** — `resolve()` from approve/deny settles the decision; `settled` flag prevents double-call.
 
 ## Test Pattern
 
-Tests spawn the actual server as a child process:
+Tests spawn the server as a child process via `bun run server/index.ts`:
 
 ```
-startServer(planInput?, extraEnv?) → { process, port, homeDir, waitForExit() }
+startServer(planContent?) → { process, port, homeDir, waitForExit() }
 ```
 
-- Spawns `npx tsx server/index.ts` with PLAN_INPUT env var
-- Parses `PLANCOP_PORT:(\d+)` from stderr to get assigned port
-- Creates temp HOME dir for session isolation
+- Writes ExitPlanMode JSON to stdin, closes stdin
+- Parses `http://localhost:(\d+)` from stderr to get assigned port
+- Creates temp HOME dir for isolation
 - afterEach kills all spawned processes + cleans temp dirs
-- Each test does HTTP requests to `http://127.0.0.1:${port}/api/...`
+- Uses `// @vitest-environment node` to avoid happy-dom CORS issues
 
 ## Gotchas
 
-- **@ts-nocheck** — index.ts and index.test.ts have type checking disabled. Don't remove.
-- **Dual exit** — shutdown() calls process.exit() twice (callback + 500ms timeout).
-- **settled gate** — Once settled=true, approve/deny calls are silently ignored.
-- **Port 0** — Always auto-assigned. Never hardcode a port.
-- **PLAN_INPUT** — Must be valid JSON with `{ timestamp, cwd, toolName, toolArgs }`. toolArgs is itself a JSON string (double-parse).
-- **Persistent 409** — Second push-plan while first is pending returns 409 Conflict.
+- **@ts-nocheck** — index.test.ts has type checking disabled. Don't remove.
+- **settled gate** — Once `settled = true`, subsequent approve/deny calls are silently ignored.
+- **Port 0** — Always auto-assigned via `Bun.serve({ port: 0 })`. Never hardcode.
+- **stdin must close** — Server reads all of stdin before starting. Tests must call `child.stdin.end()`.
+- **UI must be built first** — Reads `ui/dist/index.html`. If missing, returns 500.

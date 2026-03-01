@@ -1,8 +1,8 @@
 # Plancop
 
-Visual plan review for **Copilot CLI**. Annotate and review AI agent plans, approve or deny before they execute, and send structured feedback back to the agent — all from a browser UI. Works with any repository.
+Visual plan review for **Claude Code**. Annotate and review AI agent plans, approve or deny before they execute, and send structured feedback back to the agent — all from a browser UI.
 
-Inspired by [Plannotator](https://github.com/backnotprop/plannotator) (which supports Claude Code, OpenCode, and Pi), Plancop brings the same visual plan review experience to **GitHub Copilot CLI**.
+Inspired by [Plannotator](https://github.com/backnotprop/plannotator), Plancop brings visual plan review to Claude Code via the `ExitPlanMode` hook.
 
 ## Features
 
@@ -17,10 +17,10 @@ Inspired by [Plannotator](https://github.com/backnotprop/plannotator) (which sup
 
 ## How It Works
 
-When Copilot CLI's agent proposes file edits, new files, or shell commands:
+When Claude Code exits plan mode and presents its plan:
 
-1. Plancop's `preToolUse` hook intercepts the tool call
-2. A browser UI opens with the proposed changes
+1. Plancop's `ExitPlanMode` hook intercepts the plan
+2. A browser UI opens with the proposed plan
 3. You review, annotate, and **approve** or **deny**
 4. Your decision and annotations are sent back to the agent
 
@@ -28,9 +28,9 @@ When Copilot CLI's agent proposes file edits, new files, or shell commands:
 
 ### Prerequisites
 
-- Node.js 22+
-- npm
-- [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli)
+- [Bun](https://bun.sh/) 1.x+
+- npm (for UI dependencies)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 
 ### 1. Install plancop (once)
 
@@ -46,7 +46,7 @@ You can clone it anywhere. Remember the path — you'll use it in step 2.
 
 ### 2. Add to any repo
 
-Copilot CLI automatically loads hooks from `.github/hooks/` in whatever repo you're working in. For each repo where you want plan review:
+Claude Code loads hooks from `.github/hooks/` in your project. For each repo where you want plan review:
 
 ```bash
 mkdir -p .github/hooks
@@ -56,35 +56,25 @@ Create `.github/hooks/plancop.json`:
 
 ```json
 {
-  "version": 1,
-  "hooks": {
-    "preToolUse": [{
-      "type": "command",
-      "bash": "~/tools/plancop/scripts/plan-review.sh",
-      "timeoutSec": 86400
-    }]
-  }
+  "hooks": [
+    {
+      "matcher": "ExitPlanMode",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bun run ~/tools/plancop/server/index.ts"
+        }
+      ]
+    }
+  ]
 }
 ```
 
-Adjust the path to wherever you cloned plancop. The script resolves all paths relative to itself, so it works from any project.
+Adjust the path to wherever you cloned plancop.
 
 ### 3. Use it
 
-Start a Copilot CLI session. When the agent tries to edit, create, or write a file, plancop intercepts and opens the review UI.
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PLANCOP_MODE` | `auto` | `auto` (edit/create/write), `aggressive` (+bash), `always` (all tools), `off` (disabled) |
-| `PLANCOP_SESSION_MODE` | `persistent` | `persistent` (server stays alive 5 min), `ephemeral` (exits after one decision) |
-
-```bash
-export PLANCOP_MODE=aggressive
-```
+Start a Claude Code session. When the agent exits plan mode, plancop intercepts and opens the review UI.
 
 ### Keyboard Shortcuts
 
@@ -146,21 +136,18 @@ npm run lint         # Type check (tsc --noEmit)
 ## Architecture
 
 ```
-Copilot CLI
-    ↓ preToolUse hook
-scripts/plan-review.sh
-    ↓ spawns
-server/index.ts (HTTP, auto-assigned port)
+Claude Code
+    ↓ ExitPlanMode hook
+stdin (JSON) → server/index.ts (Bun.serve, auto-assigned port)
     ↓ serves
 Browser UI (React + Vite, single-file build)
     ↓ POST /api/approve or /api/deny
-Decision returned to Copilot CLI
+stdout (PermissionRequest JSON) → Claude Code
 ```
 
 | Directory | Purpose |
 |-----------|---------|
-| `scripts/` | Copilot CLI hook entry point (bash) |
-| `server/` | HTTP server — zero npm deps, Node built-ins only |
+| `server/` | Bun HTTP server — zero npm deps |
 | `mcp/` | MCP stdio server (JSON-RPC 2.0) — independent from HTTP server |
 | `ui/` | React 19 + Vite 6 + Tailwind 4 — single-file build |
 | `src/types/` | Shared TypeScript types |
@@ -169,7 +156,7 @@ Decision returned to Copilot CLI
 
 **"plancop ui not built"** — Run `npm run build` in the plancop directory. The UI must be built before first use.
 
-**Browser won't open** — Check stderr for the URL: `plancop: Review UI at http://127.0.0.1:<PORT>`. The port is auto-assigned each time.
+**Browser won't open** — Check stderr for the URL: `plancop: Review UI at http://localhost:<PORT>`. The port is auto-assigned each time.
 
 **Annotations not saved** — You must click "Approve" or "Send Feedback". Closing the browser discards changes.
 
