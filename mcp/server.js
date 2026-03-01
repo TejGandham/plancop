@@ -147,7 +147,7 @@ function launchReview(plan) {
   return new Promise((resolveReview) => {
     let settled = false;
 
-    const htmlPath = resolve(process.cwd(), "ui/dist/index.html");
+    const htmlPath = resolve(import.meta.dirname, "../ui/dist/index.html");
     let html = "<!doctype html><html><body><h1>plancop ui not built</h1></body></html>";
     if (existsSync(htmlPath)) {
       try {
