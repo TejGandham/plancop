@@ -141,7 +141,11 @@ describe("server/index.ts", () => {
       cwd: "/tmp/project",
       timestamp: 123,
     });
-    expect(body.toolArgs).toEqual({ file: "plan.md", content: "# New Plan" });
+    expect(body.toolArgs).toEqual({
+      file: "plan.md",
+      content: "# New Plan",
+      language: "markdown",
+    });
   });
 
   it("serves GET /api/versions and GET /api/version/:id", async () => {
