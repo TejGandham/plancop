@@ -1,50 +1,50 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { parseMarkdownToBlocks, exportAnnotations, exportLinkedDocAnnotations, extractFrontmatter, Frontmatter } from '@plannotator/ui/utils/parser';
-import { Viewer, ViewerHandle } from '@plannotator/ui/components/Viewer';
-import { AnnotationPanel } from '@plannotator/ui/components/AnnotationPanel';
-import { ExportModal } from '@plannotator/ui/components/ExportModal';
-import { ImportModal } from '@plannotator/ui/components/ImportModal';
-import { ConfirmDialog } from '@plannotator/ui/components/ConfirmDialog';
-import { Annotation, Block, EditorMode, type ImageAttachment } from '@plannotator/ui/types';
-import { ThemeProvider } from '@plannotator/ui/components/ThemeProvider';
-import { ModeToggle } from '@plannotator/ui/components/ModeToggle';
-import { ModeSwitcher } from '@plannotator/ui/components/ModeSwitcher';
-import { TaterSpriteRunning } from '@plannotator/ui/components/TaterSpriteRunning';
-import { TaterSpritePullup } from '@plannotator/ui/components/TaterSpritePullup';
-import { Settings } from '@plannotator/ui/components/Settings';
-import { useSharing } from '@plannotator/ui/hooks/useSharing';
-import { useAgents } from '@plannotator/ui/hooks/useAgents';
-import { useActiveSection } from '@plannotator/ui/hooks/useActiveSection';
-import { storage } from '@plannotator/ui/utils/storage';
-import { CompletionOverlay } from '@plannotator/ui/components/CompletionOverlay';
-import { UpdateBanner } from '@plannotator/ui/components/UpdateBanner';
-import { getObsidianSettings, getEffectiveVaultPath, isObsidianConfigured, CUSTOM_PATH_SENTINEL } from '@plannotator/ui/utils/obsidian';
-import { getBearSettings } from '@plannotator/ui/utils/bear';
-import { getDefaultNotesApp } from '@plannotator/ui/utils/defaultNotesApp';
-import { getAgentSwitchSettings, getEffectiveAgentName } from '@plannotator/ui/utils/agentSwitch';
-import { getPlanSaveSettings } from '@plannotator/ui/utils/planSave';
-import { getUIPreferences, needsUIFeaturesSetup, type UIPreferences } from '@plannotator/ui/utils/uiPreferences';
-import { getEditorMode, saveEditorMode } from '@plannotator/ui/utils/editorMode';
-import { useResizablePanel } from '@plannotator/ui/hooks/useResizablePanel';
-import { ResizeHandle } from '@plannotator/ui/components/ResizeHandle';
+import { parseMarkdownToBlocks, exportAnnotations, exportLinkedDocAnnotations, extractFrontmatter, Frontmatter } from './utils/parser';
+import { Viewer, ViewerHandle } from './components/Viewer';
+import { AnnotationPanel } from './components/AnnotationPanel';
+import { ExportModal } from './components/ExportModal';
+import { ImportModal } from './components/ImportModal';
+import { ConfirmDialog } from './components/ConfirmDialog';
+import { Annotation, Block, EditorMode, type ImageAttachment } from './types';
+import { ThemeProvider } from './components/ThemeProvider';
+import { ModeToggle } from './components/ModeToggle';
+import { ModeSwitcher } from './components/ModeSwitcher';
+import { TaterSpriteRunning } from './components/TaterSpriteRunning';
+import { TaterSpritePullup } from './components/TaterSpritePullup';
+import { Settings } from './components/Settings';
+import { useSharing } from './hooks/useSharing';
+import { useAgents } from './hooks/useAgents';
+import { useActiveSection } from './hooks/useActiveSection';
+import { storage } from './utils/storage';
+import { CompletionOverlay } from './components/CompletionOverlay';
+import { UpdateBanner } from './components/UpdateBanner';
+import { getObsidianSettings, getEffectiveVaultPath, isObsidianConfigured, CUSTOM_PATH_SENTINEL } from './utils/obsidian';
+import { getBearSettings } from './utils/bear';
+import { getDefaultNotesApp } from './utils/defaultNotesApp';
+import { getAgentSwitchSettings, getEffectiveAgentName } from './utils/agentSwitch';
+import { getPlanSaveSettings } from './utils/planSave';
+import { getUIPreferences, needsUIFeaturesSetup, type UIPreferences } from './utils/uiPreferences';
+import { getEditorMode, saveEditorMode } from './utils/editorMode';
+import { useResizablePanel } from './hooks/useResizablePanel';
+import { ResizeHandle } from './components/ResizeHandle';
 import {
   getPermissionModeSettings,
   needsPermissionModeSetup,
   type PermissionMode,
-} from '@plannotator/ui/utils/permissionMode';
-import { PermissionModeSetup } from '@plannotator/ui/components/PermissionModeSetup';
-import { UIFeaturesSetup } from '@plannotator/ui/components/UIFeaturesSetup';
-import { PlanDiffMarketing } from '@plannotator/ui/components/plan-diff/PlanDiffMarketing';
-import { needsPlanDiffMarketingDialog } from '@plannotator/ui/utils/planDiffMarketing';
-import { ImageAnnotator } from '@plannotator/ui/components/ImageAnnotator';
-import { deriveImageName } from '@plannotator/ui/components/AttachmentsButton';
-import { useSidebar } from '@plannotator/ui/hooks/useSidebar';
-import { usePlanDiff, type VersionInfo } from '@plannotator/ui/hooks/usePlanDiff';
-import { useLinkedDoc } from '@plannotator/ui/hooks/useLinkedDoc';
-import { SidebarTabs } from '@plannotator/ui/components/sidebar/SidebarTabs';
-import { SidebarContainer } from '@plannotator/ui/components/sidebar/SidebarContainer';
-import { PlanDiffViewer } from '@plannotator/ui/components/plan-diff/PlanDiffViewer';
-import type { PlanDiffMode } from '@plannotator/ui/components/plan-diff/PlanDiffModeSwitcher';
+} from './utils/permissionMode';
+import { PermissionModeSetup } from './components/PermissionModeSetup';
+import { UIFeaturesSetup } from './components/UIFeaturesSetup';
+import { PlanDiffMarketing } from './components/plan-diff/PlanDiffMarketing';
+import { needsPlanDiffMarketingDialog } from './utils/planDiffMarketing';
+import { ImageAnnotator } from './components/ImageAnnotator';
+import { deriveImageName } from './components/AttachmentsButton';
+import { useSidebar } from './hooks/useSidebar';
+import { usePlanDiff, type VersionInfo } from './hooks/usePlanDiff';
+import { useLinkedDoc } from './hooks/useLinkedDoc';
+import { SidebarTabs } from './components/sidebar/SidebarTabs';
+import { SidebarContainer } from './components/sidebar/SidebarContainer';
+import { PlanDiffViewer } from './components/plan-diff/PlanDiffViewer';
+import type { PlanDiffMode } from './components/plan-diff/PlanDiffModeSwitcher';
 
 const PLAN_CONTENT = `# Implementation Plan: Real-time Collaboration
 
@@ -221,7 +221,7 @@ class OperationalTransform {
 
 \`\`\`tsx
 import React, { useEffect, useState } from 'react';
-import { useCollaboration } from '../hooks/useCollaboration';
+import { useCollaboration } from './hooks/useCollaboration';
 
 interface CursorOverlayProps {
   documentId: string;

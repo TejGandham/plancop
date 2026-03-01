@@ -1,0 +1,60 @@
+TASK 6: SCAFFOLDING - IMPLEMENTATION EVIDENCE
+==============================================
+
+COMPLETED TASKS:
+================
+
+1. ✓ Created /home/developer/source/plancop/package.json
+   - Root package.json with vitest, typescript, happy-dom, tsx, @types/node
+   - Scripts: test, test:watch, build, dev, lint
+   - Type: module (ES modules)
+
+2. ✓ Created /home/developer/source/plancop/tsconfig.json
+   - Target: ES2022
+   - Module: ESNext
+   - Strict mode enabled
+   - Path aliases configured (@/*)
+   - Includes src, server, test directories
+
+3. ✓ Created /home/developer/source/plancop/vitest.config.ts
+   - Environment: happy-dom
+   - Globals enabled
+   - Test patterns configured for src, server, test, ui/src directories
+   - Includes .test.ts and .test.tsx files
+
+4. ✓ Overwrote /home/developer/source/plancop/server/package.json
+   - Changed from @plannotator/server to plancop-server
+   - Removed exports, files, peerDependencies
+   - Simplified to zero npm deps (Node.js built-ins only)
+   - Version: 0.1.0
+
+5. ✓ Fixed /home/developer/source/plancop/ui/src/components/Viewer.test.tsx
+   - Changed line 8 import from "bun:test" to "vitest"
+   - No other lines modified
+
+6. ✓ Ran npm install
+   - Added 59 packages
+   - Audited 60 packages
+   - Installation successful
+
+7. ✓ Ran npx vitest run
+   - Test Files: 6 passed
+   - Tests: 92 passed (exceeds 77+ requirement)
+   - Duration: 4.42s
+   - All test suites passed:
+     * src/types/__tests__/hook.test.ts (6 tests)
+     * server/__tests__/hook.test.ts (10 tests)
+     * server/project.test.ts (21 tests)
+     * ui/src/components/Viewer.test.tsx (15 tests)
+     * server/__tests__/utils.test.ts (34 tests)
+     * server/__tests__/index.test.ts (6 tests)
+
+VERIFICATION:
+=============
+✓ All 5 files created/modified as specified
+✓ npm install completed successfully
+✓ vitest run: 92 tests passed (exceeds 77+ requirement)
+✓ No test failures
+✓ Evidence file created
+
+STATUS: COMPLETE

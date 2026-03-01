@@ -1,0 +1,32 @@
+Command: bash test/simulate.sh edit (with PLANCOP_PORT=9999)
+Server started: YES
+Port captured: 9999 (pinned via PLANCOP_PORT env var)
+Browser opened: NO (no display — URL printed to stderr instead)
+Decision captured: {"permissionDecision":"allow"}
+Temp files cleaned: YES (trap on EXIT removes both DECISION_FILE and STDERR_FILE)
+Result: PASS
+
+Additional tests run:
+- Deny flow: {"permissionDecision":"deny","permissionDecisionReason":"not safe"} — PASS
+- Random port (no PLANCOP_PORT): port 37825 auto-assigned — PASS
+- Passthrough (toolName=read): exit 0, no server started — PASS
+- Stdout clean: no debug output mixed with decision JSON — PASS
+- Stderr has debug: plancop: prefixed messages on stderr — PASS
+- Temp file cleanup: both /tmp/plancop-decision-* and /tmp/plancop-stderr-* removed — PASS
+- PLANCOP_PORT=9999 pinning: server bound to 9999 exactly — PASS
+- Exit code: 0 on successful approve — PASS
+
+Files modified:
+- scripts/plan-review.sh: rewrote server launch section (lines 62-151)
+  - Proper stdout/stderr separation (decision → file, port+debug → separate file)
+  - Background process with wait pattern instead of pipe (fixes variable scope)
+  - 10s timeout for tsx cold-start
+  - grep || true to avoid set -e exit on empty match
+  - STDERR_FILE added to trap cleanup
+- scripts/plancop-server.ts: NEW — Node.js-compatible CLI entry point
+  - Uses Node http module (not Bun) — runs with npx tsx
+  - Reads PLAN_INPUT env var
+  - Writes PLANCOP_PORT:XXXX to stderr
+  - Outputs Copilot CLI decision JSON to stdout
+  - Serves minimal review HTML with approve/deny buttons
+  - Handles /api/approve, /api/deny, /api/plan endpoints

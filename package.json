@@ -1,0 +1,20 @@
+{
+  "name": "plancop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "cd ui && vite build",
+    "dev": "cd ui && vite dev",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.2",
+    "vitest": "^3.2.0",
+    "happy-dom": "^17.0.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.14.0"
+  }
+}

@@ -1,0 +1,14 @@
+vitest run server/__tests__/utils.test.ts server/project.test.ts: pass
+Tests: 55 passed (34 in utils.test.ts + 21 in project.test.ts)
+
+Test breakdown:
+- storage — readFile / writeFile: 7 tests (getPlanDir, savePlan, saveAnnotations, saveFinalSnapshot, generateSlug)
+- git — diff utilities: 8 tests (getCurrentBranch, getDefaultBranch, runGitDiff x6 diff types)
+- browser — openBrowser: 2 tests (function exists, returns boolean)
+- project — sanitizeTag: 9 tests
+- project — extractRepoName: 3 tests
+- project — extractDirName: 3 tests
+- project — detectProjectName: 2 tests
+- project.test.ts (original ported): 21 tests
+
+All pass with vitest v3.2.4 on Node.js v23.11.1

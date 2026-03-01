@@ -5,7 +5,7 @@
  * Priority: git repo name > directory name > null
  */
 
-import { $ } from "bun";
+import { spawnSync } from "child_process";
 
 /**
  * Sanitize a string for use as a tag
@@ -72,9 +72,12 @@ export function extractDirName(path: string): string | null {
 export async function detectProjectName(): Promise<string | null> {
   // Try git repo name first
   try {
-    const result = await $`git rev-parse --show-toplevel`.quiet().nothrow();
-    if (result.exitCode === 0) {
-      const repoName = extractRepoName(result.stdout.toString());
+    const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+      encoding: "utf-8",
+      stdio: "pipe",
+    });
+    if (result.status === 0 && result.stdout) {
+      const repoName = extractRepoName(result.stdout.trim());
       if (repoName) return repoName;
     }
   } catch {

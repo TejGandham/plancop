@@ -1,0 +1,23 @@
+rg 'Bun\.' server/storage.ts server/git.ts server/browser.ts server/repo.ts server/project.ts server/image.ts output: 0 matches
+rg 'import.*from.*bun' server/storage.ts server/git.ts server/browser.ts server/repo.ts server/project.ts server/image.ts server/project.test.ts output: 0 matches
+
+Files ported:
+- server/git.ts: import { $ } from "bun" + 7x $`git...` → execFileSync/spawnSync from child_process
+- server/browser.ts: import { $ } from "bun" + Bun.file() + 6x $`...` → spawn from child_process + fs.existsSync/readFileSync
+- server/repo.ts: import { $ } from "bun" + 4x $`git...`.quiet().nothrow() → spawnSync from child_process
+- server/project.ts: import { $ } from "bun" + 1x $`git...`.quiet().nothrow() → spawnSync from child_process
+- server/project.test.ts: import from "bun:test" → import from "vitest"
+
+Files already clean (no changes needed):
+- server/storage.ts: already ported to fs/path/os Node.js built-ins
+- server/image.ts: already clean, uses only path.resolve
+
+API signatures preserved:
+- getCurrentBranch(): Promise<string> ✓
+- getDefaultBranch(): Promise<string> ✓
+- getGitContext(): Promise<GitContext> ✓
+- runGitDiff(diffType, defaultBranch?): Promise<DiffResult> ✓
+- openBrowser(url): Promise<boolean> ✓
+- getRepoInfo(): Promise<RepoInfo | null> ✓
+- detectProjectName(): Promise<string | null> ✓
+- sanitizeTag, extractRepoName, extractDirName: unchanged sync functions ✓

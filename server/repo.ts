@@ -5,7 +5,7 @@
  * Priority: org/repo from remote → repo name → directory name
  */
 
-import { $ } from "bun";
+import { spawnSync } from "child_process";
 
 export interface RepoInfo {
   /** Display string (e.g., "backnotprop/plannotator" or "my-project") */
@@ -51,9 +51,12 @@ function getDirName(path: string): string | null {
  */
 async function getCurrentBranch(): Promise<string | undefined> {
   try {
-    const result = await $`git rev-parse --abbrev-ref HEAD`.quiet().nothrow();
-    if (result.exitCode === 0) {
-      const branch = result.stdout.toString().trim();
+    const result = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      encoding: "utf-8",
+      stdio: "pipe",
+    });
+    if (result.status === 0 && result.stdout) {
+      const branch = result.stdout.trim();
       return branch && branch !== "HEAD" ? branch : undefined;
     }
   } catch {
@@ -74,9 +77,12 @@ export async function getRepoInfo(): Promise<RepoInfo | null> {
 
   // Try git remote URL first
   try {
-    const result = await $`git remote get-url origin`.quiet().nothrow();
-    if (result.exitCode === 0) {
-      const orgRepo = parseRemoteUrl(result.stdout.toString().trim());
+    const result = spawnSync("git", ["remote", "get-url", "origin"], {
+      encoding: "utf-8",
+      stdio: "pipe",
+    });
+    if (result.status === 0 && result.stdout) {
+      const orgRepo = parseRemoteUrl(result.stdout.trim());
       if (orgRepo) {
         branch = await getCurrentBranch();
         return { display: orgRepo, branch };
@@ -88,8 +94,11 @@ export async function getRepoInfo(): Promise<RepoInfo | null> {
 
   // Fallback: git repo root name
   try {
-    const result = await $`git rev-parse --show-toplevel`.quiet().nothrow();
-    if (result.exitCode === 0) {
+    const result = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+      encoding: "utf-8",
+      stdio: "pipe",
+    });
+    if (result.status === 0 && result.stdout) {
       const repoName = getDirName(result.stdout.toString());
       if (repoName) {
         branch = await getCurrentBranch();

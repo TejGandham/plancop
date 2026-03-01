@@ -1,0 +1,4 @@
+Test: malformed toolArgs
+Input: toolArgs = 'not valid json'
+Result: [error object returned, no crash]
+vitest: PASS
