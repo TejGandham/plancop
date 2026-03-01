@@ -129,7 +129,7 @@ function loadInitialHookInput(required: boolean): HookInput | null {
 }
 
 function loadHtml(): string {
-  const htmlPath = resolve(process.cwd(), "ui/dist/index.html");
+  const htmlPath = resolve(import.meta.dirname, "../ui/dist/index.html");
   try {
     return readFileSync(htmlPath, "utf8");
   } catch {
