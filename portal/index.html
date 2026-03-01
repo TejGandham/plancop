@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plannotator — Shared Plan</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0f1117;--fg:#e2e4ea;--card:#1a1d27;--border:#2a2d3a;
+    --muted:#8b8fa3;--accent:#a78bfa;--code-bg:#1e2130;
+    --font-sans:'Inter',system-ui,sans-serif;
+    --font-mono:'JetBrains Mono','Fira Code',monospace;
+  }
+  @media(prefers-color-scheme:light){
+    :root{
+      --bg:#f8f9fb;--fg:#1a1d27;--card:#fff;--border:#e2e4ea;
+      --muted:#6b7085;--accent:#7c3aed;--code-bg:#f0f1f5;
+    }
+  }
+  html{font-size:16px;-webkit-font-smoothing:antialiased}
+  body{font-family:var(--font-sans);background:var(--bg);color:var(--fg);line-height:1.7;min-height:100vh}
+
+  /* Layout */
+  .container{max-width:860px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  @media(max-width:640px){.container{padding:1rem 1rem 3rem}}
+
+  /* Header */
+  .header{display:flex;align-items:center;gap:.75rem;padding-bottom:1.25rem;margin-bottom:2rem;border-bottom:1px solid var(--border)}
+  .header h1{font-size:.875rem;font-weight:600;letter-spacing:-.01em}
+  .badge{font-size:.65rem;padding:.15rem .5rem;border-radius:4px;background:color-mix(in oklch,var(--accent) 15%,transparent);color:var(--accent);font-weight:500}
+
+  /* Loading / Error */
+  .state{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1rem;color:var(--muted)}
+  .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .error-icon{font-size:2rem}
+
+  /* Markdown rendering */
+  .plan h1{font-size:1.75rem;font-weight:700;margin:1.5rem 0 .75rem;letter-spacing:-.02em}
+  .plan h2{font-size:1.35rem;font-weight:600;margin:1.75rem 0 .5rem;padding-top:.5rem;border-top:1px solid var(--border)}
+  .plan h3{font-size:1.1rem;font-weight:600;margin:1.25rem 0 .4rem}
+  .plan h4{font-size:1rem;font-weight:600;margin:1rem 0 .3rem}
+  .plan h5,.plan h6{font-size:.9rem;font-weight:600;margin:.75rem 0 .25rem}
+  .plan p{margin:.5rem 0}
+  .plan ul,.plan ol{margin:.4rem 0 .4rem 1.5rem}
+  .plan li{margin:.15rem 0}
+  .plan li ul,.plan li ol{margin:.1rem 0 .1rem 1.25rem}
+  .plan blockquote{border-left:3px solid var(--accent);padding:.5rem 1rem;margin:.75rem 0;color:var(--muted);background:color-mix(in oklch,var(--accent) 5%,transparent);border-radius:0 6px 6px 0}
+  .plan hr{border:none;border-top:1px solid var(--border);margin:1.5rem 0}
+  .plan code{font-family:var(--font-mono);font-size:.85em;background:var(--code-bg);padding:.15rem .35rem;border-radius:4px}
+  .plan pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:1rem;margin:.75rem 0;overflow-x:auto}
+  .plan pre code{background:none;padding:0;font-size:.8rem;line-height:1.6}
+  .plan strong{font-weight:600}
+  .plan em{font-style:italic}
+  .plan a{color:var(--accent);text-decoration:none}
+  .plan a:hover{text-decoration:underline}
+  .plan table{border-collapse:collapse;width:100%;margin:.75rem 0}
+  .plan th,.plan td{border:1px solid var(--border);padding:.4rem .75rem;text-align:left;font-size:.875rem}
+  .plan th{background:var(--code-bg);font-weight:600}
+  .plan img{max-width:100%;border-radius:6px}
+
+  /* Checkbox styling */
+  .plan input[type="checkbox"]{margin-right:.4rem;accent-color:var(--accent)}
+
+  /* Annotations sidebar */
+  .annotations{margin-top:2.5rem;padding-top:1.5rem;border-top:1px solid var(--border)}
+  .annotations h2{font-size:1rem;font-weight:600;margin-bottom:1rem;color:var(--muted)}
+  .ann-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;margin-bottom:.5rem;font-size:.85rem}
+  .ann-type{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:.25rem}
+  .ann-type.deletion{color:#ef4444}
+  .ann-type.replacement{color:#f59e0b}
+  .ann-type.comment{color:#3b82f6}
+  .ann-type.insertion{color:#10b981}
+  .ann-type.global{color:var(--accent)}
+  .ann-original{color:var(--muted);font-size:.8rem;margin-bottom:.2rem}
+  .ann-text{color:var(--fg)}
+  .ann-author{font-size:.7rem;color:var(--muted);margin-top:.25rem}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="container" id="app">
+  <div class="state" id="loading">
+    <div class="spinner"></div>
+    <span style="font-size:.85rem">Loading shared plan…</span>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // --- Decompression (mirrors sharing.ts: deflate-raw + base64url) ---
+  async function decompress(b64) {
+    // Restore standard base64 from base64url
+    var base64 = b64.replace(/-/g, '+').replace(/_/g, '/');
+    var binary = atob(base64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    var ds = new DecompressionStream('deflate-raw');
+    var writer = ds.writable.getWriter();
+    writer.write(bytes);
+    writer.close();
+
+    var buf = await new Response(ds.readable).arrayBuffer();
+    return JSON.parse(new TextDecoder().decode(buf));
+  }
+
+  // --- Minimal Markdown → HTML renderer ---
+  function renderMarkdown(md) {
+    // Normalize line endings
+    md = md.replace(/\r\n/g, '\n');
+
+    var lines = md.split('\n');
+    var html = [];
+    var inCodeBlock = false;
+    var codeLang = '';
+    var codeLines = [];
+    var inList = false;
+    var listStack = []; // stack of {type, indent}
+
+    function escapeHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function inlineFormat(text) {
+      // Images
+      text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+      // Links
+      text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      // Bold + italic
+      text = text.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+      // Bold
+      text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      text = text.replace(/__(.+?)__/g, '<strong>$1</strong>');
+      // Italic
+      text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      text = text.replace(/_(.+?)_/g, '<em>$1</em>');
+      // Strikethrough
+      text = text.replace(/~~(.+?)~~/g, '<del>$1</del>');
+      // Inline code
+      text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+      return text;
+    }
+
+    function closeAllLists() {
+      while (listStack.length > 0) {
+        var item = listStack.pop();
+        html.push(item.type === 'ol' ? '</ol>' : '</ul>');
+      }
+      inList = false;
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+
+      // Fenced code blocks
+      if (/^```/.test(line)) {
+        if (!inCodeBlock) {
+          closeAllLists();
+          inCodeBlock = true;
+          codeLang = line.slice(3).trim();
+          codeLines = [];
+        } else {
+          html.push('<pre><code' + (codeLang ? ' class="language-' + escapeHtml(codeLang) + '"' : '') + '>' + escapeHtml(codeLines.join('\n')) + '</code></pre>');
+          inCodeBlock = false;
+          codeLang = '';
+        }
+        continue;
+      }
+      if (inCodeBlock) { codeLines.push(line); continue; }
+
+      // Blank line
+      if (/^\s*$/.test(line)) {
+        closeAllLists();
+        continue;
+      }
+
+      // Headings
+      var headingMatch = line.match(/^(#{1,6})\s+(.*)/);
+      if (headingMatch) {
+        closeAllLists();
+        var level = headingMatch[1].length;
+        html.push('<h' + level + '>' + inlineFormat(escapeHtml(headingMatch[2])) + '</h' + level + '>');
+        continue;
+      }
+
+      // Horizontal rule
+      if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+        closeAllLists();
+        html.push('<hr>');
+        continue;
+      }
+
+      // Blockquote
+      if (/^>\s?/.test(line)) {
+        closeAllLists();
+        var bqText = line.replace(/^>\s?/, '');
+        html.push('<blockquote><p>' + inlineFormat(escapeHtml(bqText)) + '</p></blockquote>');
+        continue;
+      }
+
+      // List items (unordered: -, *, +  or ordered: 1.)
+      var listMatch = line.match(/^(\s*)([-*+]|\d+\.)\s+(.*)/);
+      if (listMatch) {
+        var indent = listMatch[1].length;
+        var marker = listMatch[2];
+        var content = listMatch[3];
+        var listType = /\d/.test(marker) ? 'ol' : 'ul';
+
+        // Checkbox support
+        var checkbox = '';
+        var cbMatch = content.match(/^\[([ xX])\]\s*(.*)/);
+        if (cbMatch) {
+          var checked = cbMatch[1] !== ' ' ? ' checked disabled' : ' disabled';
+          checkbox = '<input type="checkbox"' + checked + '>';
+          content = cbMatch[2];
+        }
+
+        if (!inList) {
+          inList = true;
+          listStack.push({ type: listType, indent: indent });
+          html.push(listType === 'ol' ? '<ol>' : '<ul>');
+        } else {
+          // Handle nesting
+          var current = listStack[listStack.length - 1];
+          if (indent > current.indent) {
+            listStack.push({ type: listType, indent: indent });
+            html.push(listType === 'ol' ? '<ol>' : '<ul>');
+          } else if (indent < current.indent) {
+            while (listStack.length > 1 && listStack[listStack.length - 1].indent > indent) {
+              var closed = listStack.pop();
+              html.push(closed.type === 'ol' ? '</ol>' : '</ul>');
+            }
+          }
+        }
+
+        html.push('<li>' + checkbox + inlineFormat(escapeHtml(content)) + '</li>');
+        continue;
+      }
+
+      // Table detection (simple)
+      if (line.indexOf('|') !== -1 && i + 1 < lines.length && /^\|?\s*[-:]+/.test(lines[i + 1])) {
+        closeAllLists();
+        // Header row
+        var headers = line.split('|').map(function(c) { return c.trim(); }).filter(Boolean);
+        i++; // skip separator
+        html.push('<table><thead><tr>');
+        headers.forEach(function(h) { html.push('<th>' + inlineFormat(escapeHtml(h)) + '</th>'); });
+        html.push('</tr></thead><tbody>');
+        while (i + 1 < lines.length && lines[i + 1].indexOf('|') !== -1) {
+          i++;
+          var cells = lines[i].split('|').map(function(c) { return c.trim(); }).filter(Boolean);
+          html.push('<tr>');
+          cells.forEach(function(c) { html.push('<td>' + inlineFormat(escapeHtml(c)) + '</td>'); });
+          html.push('</tr>');
+        }
+        html.push('</tbody></table>');
+        continue;
+      }
+
+      // Paragraph
+      closeAllLists();
+      html.push('<p>' + inlineFormat(escapeHtml(line)) + '</p>');
+    }
+
+    closeAllLists();
+    if (inCodeBlock) {
+      html.push('<pre><code>' + escapeHtml(codeLines.join('\n')) + '</code></pre>');
+    }
+
+    return html.join('\n');
+  }
+
+  // --- Render annotations list ---
+  function renderAnnotations(annotations) {
+    if (!annotations || annotations.length === 0) return '';
+
+    var typeNames = { D: 'Deletion', R: 'Replacement', C: 'Comment', I: 'Insertion', G: 'Global Comment' };
+    var typeClasses = { D: 'deletion', R: 'replacement', C: 'comment', I: 'insertion', G: 'global' };
+
+    var cards = annotations.map(function(ann) {
+      var type = ann[0];
+      var typeName = typeNames[type] || type;
+      var typeClass = typeClasses[type] || '';
+      var parts = [];
+
+      parts.push('<div class="ann-card">');
+      parts.push('<div class="ann-type ' + typeClass + '">' + typeName + '</div>');
+
+      if (type === 'G') {
+        // Global: [G, text, author, images?]
+        if (ann[1]) parts.push('<div class="ann-text">' + escapeForDisplay(ann[1]) + '</div>');
+        if (ann[2]) parts.push('<div class="ann-author">— ' + escapeForDisplay(ann[2]) + '</div>');
+      } else if (type === 'D') {
+        // Deletion: [D, original, author, images?]
+        parts.push('<div class="ann-original">❌ ' + escapeForDisplay(ann[1]) + '</div>');
+        if (ann[2]) parts.push('<div class="ann-author">— ' + escapeForDisplay(ann[2]) + '</div>');
+      } else {
+        // R, C, I: [type, original, text, author, images?]
+        if (ann[1]) parts.push('<div class="ann-original">"' + escapeForDisplay(ann[1]) + '"</div>');
+        if (ann[2]) parts.push('<div class="ann-text">' + (type === 'R' ? '→ ' : '') + escapeForDisplay(ann[2]) + '</div>');
+        if (ann[3]) parts.push('<div class="ann-author">— ' + escapeForDisplay(ann[3]) + '</div>');
+      }
+
+      parts.push('</div>');
+      return parts.join('');
+    });
+
+    return '<div class="annotations"><h2>Annotations (' + annotations.length + ')</h2>' + cards.join('') + '</div>';
+  }
+
+  function escapeForDisplay(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // --- Main ---
+  async function main() {
+    var app = document.getElementById('app');
+    var hash = window.location.hash.slice(1);
+
+    if (!hash) {
+      app.innerHTML =
+        '<div class="header"><h1>Plannotator</h1><span class="badge">Share Portal</span></div>' +
+        '<div class="state"><div class="error-icon">📋</div><span>No plan data in URL.</span>' +
+        '<span style="font-size:.75rem;color:var(--muted)">Share links include the plan in the URL hash fragment.</span></div>';
+      return;
+    }
+
+    try {
+      var payload = await decompress(hash);
+      var planHtml = renderMarkdown(payload.p || '');
+      var annotationsHtml = renderAnnotations(payload.a);
+
+      app.innerHTML =
+        '<div class="header"><h1>Plannotator</h1><span class="badge">Shared Plan</span></div>' +
+        '<div class="plan">' + planHtml + '</div>' +
+        annotationsHtml;
+
+    } catch (err) {
+      console.error('Failed to decompress share data:', err);
+      app.innerHTML =
+        '<div class="header"><h1>Plannotator</h1><span class="badge">Share Portal</span></div>' +
+        '<div class="state"><div class="error-icon">⚠️</div>' +
+        '<span>Failed to load shared plan</span>' +
+        '<span style="font-size:.75rem;color:var(--muted)">The share link may be corrupted or incomplete.</span></div>';
+    }
+  }
+
+  main();
+})();
+</script>
+</body>
+</html>
