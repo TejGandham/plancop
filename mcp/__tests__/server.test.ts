@@ -188,4 +188,145 @@ describe("mcp/server.js", () => {
 
     await expect(server.waitForResponse(null, 150)).rejects.toThrow("Timed out");
   });
+
+  it("submit_plan: approve flow resolves with { approved: true }", async () => {
+    const server = startServer();
+
+    let stderrText = "";
+    server.process.stderr.setEncoding("utf8");
+    server.process.stderr.on("data", (chunk: string) => {
+      stderrText += chunk;
+    });
+
+    server.send({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      id: 10,
+      params: { name: "submit_plan", arguments: { plan: "# Test Plan\n\nSome content." } },
+    });
+
+    // Wait for the nested review HTTP server to start
+    const reviewPort = await new Promise<number>((resolve, reject) => {
+      const start = Date.now();
+      const check = () => {
+        const match = stderrText.match(
+          /plancop-mcp: Review UI at http:\/\/127\.0\.0\.1:(\d+)/
+        );
+        if (match) return resolve(Number(match[1]));
+        if (Date.now() - start > 10_000)
+          return reject(new Error("Timed out waiting for review server port"));
+        setTimeout(check, 50);
+      };
+      check();
+    });
+
+    // Approve immediately so the test doesn't time out
+    const approveResp = await fetch(
+      `http://127.0.0.1:${reviewPort}/api/approve`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }
+    );
+    expect(approveResp.status).toBe(200);
+
+    // Wait for MCP to respond
+    const response = await server.waitForResponse(10, 5_000);
+    expect(response.error).toBeUndefined();
+    const result = JSON.parse(
+      (response.result as { content: { text: string }[] }).content[0].text
+    );
+    expect(result).toEqual({ approved: true });
+  }, 30_000);
+
+  it("submit_plan: deny flow resolves with { approved: false, feedback }", async () => {
+    const server = startServer();
+
+    let stderrText = "";
+    server.process.stderr.setEncoding("utf8");
+    server.process.stderr.on("data", (chunk: string) => {
+      stderrText += chunk;
+    });
+
+    server.send({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      id: 11,
+      params: { name: "submit_plan", arguments: { plan: "# Draft Plan" } },
+    });
+
+    const reviewPort = await new Promise<number>((resolve, reject) => {
+      const start = Date.now();
+      const check = () => {
+        const match = stderrText.match(
+          /plancop-mcp: Review UI at http:\/\/127\.0\.0\.1:(\d+)/
+        );
+        if (match) return resolve(Number(match[1]));
+        if (Date.now() - start > 10_000)
+          return reject(new Error("Timed out waiting for review server port"));
+        setTimeout(check, 50);
+      };
+      check();
+    });
+
+    // Deny with a specific reason
+    const denyResp = await fetch(`http://127.0.0.1:${reviewPort}/api/deny`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: "Needs more detail" }),
+    });
+    expect(denyResp.status).toBe(200);
+
+    const response = await server.waitForResponse(11, 5_000);
+    expect(response.error).toBeUndefined();
+    const result = JSON.parse(
+      (response.result as { content: { text: string }[] }).content[0].text
+    );
+    expect(result).toEqual({ approved: false, feedback: "Needs more detail" });
+  }, 30_000);
+
+  it("submit_plan: empty plan string is handled and returns approved result", async () => {
+    const server = startServer();
+
+    let stderrText = "";
+    server.process.stderr.setEncoding("utf8");
+    server.process.stderr.on("data", (chunk: string) => {
+      stderrText += chunk;
+    });
+
+    server.send({
+      jsonrpc: "2.0",
+      method: "tools/call",
+      id: 12,
+      params: { name: "submit_plan", arguments: { plan: "" } },
+    });
+
+    const reviewPort = await new Promise<number>((resolve, reject) => {
+      const start = Date.now();
+      const check = () => {
+        const match = stderrText.match(
+          /plancop-mcp: Review UI at http:\/\/127\.0\.0\.1:(\d+)/
+        );
+        if (match) return resolve(Number(match[1]));
+        if (Date.now() - start > 10_000)
+          return reject(new Error("Timed out waiting for review server port"));
+        setTimeout(check, 50);
+      };
+      check();
+    });
+
+    await fetch(`http://127.0.0.1:${reviewPort}/api/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    const response = await server.waitForResponse(12, 5_000);
+    expect(response.error).toBeUndefined();
+    const result = JSON.parse(
+      (response.result as { content: { text: string }[] }).content[0].text
+    );
+    expect(result).toEqual({ approved: true });
+  }, 30_000);
 });

@@ -247,4 +247,105 @@ describe("server/index.ts", () => {
       permissionDecisionReason: "Bad plan",
     });
   });
+
+  it("handles OPTIONS preflight with 204 and CORS headers", async () => {
+    const server = await startServer();
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/plan`, {
+      method: "OPTIONS",
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(response.headers.get("access-control-allow-methods")).toContain("GET");
+  });
+
+  it("returns 404 for unknown routes", async () => {
+    const server = await startServer();
+    const response = await fetch(`http://127.0.0.1:${server.port}/nonexistent`);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: "Not found" });
+  });
+
+  it("rejects POST /api/push-plan with 400 in ephemeral mode", async () => {
+    const server = await startServer();
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/push-plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        timestamp: Date.now(),
+        cwd: "/tmp",
+        toolName: "edit",
+        toolArgs: "{}",
+      }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "push-plan is only available in persistent mode",
+    });
+  });
+
+  it("returns 409 for concurrent POST /api/push-plan while one is pending", async () => {
+    const server = await startServer(undefined, {
+      PLANCOP_SESSION_MODE: "persistent",
+    });
+    const planPayload = JSON.stringify({
+      timestamp: Date.now(),
+      cwd: "/tmp/project",
+      toolName: "create",
+      toolArgs: JSON.stringify({ file: "plan.md", content: "# Plan" }),
+    });
+
+    // First push-plan — will block waiting for a decision
+    const firstPush = fetch(`http://127.0.0.1:${server.port}/api/push-plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: planPayload,
+    });
+
+    // Give the first push-plan time to be registered on the server
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Second concurrent push-plan should be rejected
+    const secondResponse = await fetch(
+      `http://127.0.0.1:${server.port}/api/push-plan`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: planPayload,
+      }
+    );
+    expect(secondResponse.status).toBe(409);
+    expect(await secondResponse.json()).toEqual({
+      error: "A plan is already awaiting decision",
+    });
+
+    // Clean up: approve the pending first push so the server can exit
+    await fetch(`http://127.0.0.1:${server.port}/api/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    await firstPush;
+  });
+
+  it("exits with code 1 when PLAN_INPUT is invalid JSON", async () => {
+    const child = spawn("npx", ["tsx", "server/index.ts"], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        PLAN_INPUT: "{invalid-json",
+      },
+    });
+
+    let stderr = "";
+    child.stderr.on("data", (chunk: unknown) => {
+      stderr += String(chunk);
+    });
+
+    const exitCode = await new Promise<number | null>((resolve) => {
+      child.once("exit", (code) => resolve(code));
+    });
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("plancop server error:");
+  }, 30_000);
 });
