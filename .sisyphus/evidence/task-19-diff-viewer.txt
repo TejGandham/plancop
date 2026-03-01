@@ -1,0 +1,61 @@
+Task 19 — PlanDiffViewer Component
+====================================
+
+STATUS: COMPLETE (pre-existing implementation verified + tests added)
+
+## Components
+
+1. `ui/src/components/plan-diff/PlanDiffViewer.tsx`
+   - Orchestrator for plan diff views
+   - Props: diffBlocks, diffStats, diffMode, onDiffModeChange, onPlanDiffToggle, repoInfo, baseVersionLabel, baseVersion
+   - Renders either PlanCleanDiffView (rendered markdown diff) or PlanRawDiffView (raw code diff)
+   - Includes PlanDiffModeSwitcher toggle between "Rendered" and "Raw" modes
+   - VS Code diff button (opens diff in VS Code via /api/plan/vscode-diff)
+
+2. `ui/src/components/plan-diff/PlanCleanDiffView.tsx`
+   - Rendered/clean diff mode
+   - Green left border for added content (plan-diff-added CSS class)
+   - Red left border + strikethrough for removed content (plan-diff-removed CSS class)
+   - Modified blocks show old (red, struck through) above new (green)
+   - Unchanged blocks dimmed with opacity-60
+
+3. `ui/src/components/plan-diff/PlanRawDiffView.tsx`
+   - Raw markdown diff mode with +/- prefixed lines
+   - Monospace font, line numbers, colored backgrounds
+   - Added lines: plan-diff-line-added (green bg)
+   - Removed lines: plan-diff-line-removed (red bg, strikethrough)
+
+4. `ui/src/components/plan-diff/PlanDiffBadge.tsx`
+   - Shows +additions/-deletions badge in document card top-left
+   - Toggles plan diff view on click
+   - Hidden when no previous version or no changes
+
+5. `ui/src/components/plan-diff/PlanDiffModeSwitcher.tsx`
+   - Toggle between "Rendered" (clean) and "Raw" diff modes
+
+6. `ui/src/utils/planDiffEngine.ts`
+   - Uses `diff` library (diffLines) for line-level diff computation
+   - Groups adjacent remove+add into "modified" blocks
+   - Returns PlanDiffBlock[] and PlanDiffStats
+
+7. `ui/src/hooks/usePlanDiff.ts`
+   - Manages diff state: version fetching, diff computation, version browsing
+   - Fetches versions from /api/plan/versions and /api/plan/version?v=N
+   - Returns diffBlocks, diffStats, hasPreviousVersion, selectBaseVersion, etc.
+
+## CSS (ui/src/index.css)
+   - .plan-diff-added: green border-left, green-tinted bg
+   - .plan-diff-removed: red border-left, red-tinted bg
+   - .plan-diff-line-added: green bg for raw view
+   - .plan-diff-line-removed: red bg + strikethrough for raw view
+   - Light mode variants included
+
+## Tests
+   - 21 tests in ui/src/components/__tests__/PlanDiffViewer.test.tsx
+   - All passing ✓
+   - Covers: diff computation (add/remove/modify/empty), block structure invariants,
+     styling class assignment, raw diff line markers
+
+## Build
+   - `npm run build` passes ✓
+   - No LSP errors

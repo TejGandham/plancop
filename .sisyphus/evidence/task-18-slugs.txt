@@ -1,0 +1,19 @@
+Task 18 - Project/plan slug and hashing evidence
+
+Implemented in server/storage-versions.ts:
+- projectSlug(cwd): basename of cwd, kebab-cased, lowercased, special chars removed.
+- planSlug(content): first H1 heading (# ...) if present, otherwise first 50 chars, then kebab-cased.
+- contentHash(content): sha256 hex digest truncated to 16 chars.
+
+Behavior verified by tests in server/__tests__/storage-versions.test.ts:
+- projectSlug('/home/user/my-project') -> my-project
+- projectSlug('/tmp/My Cool Project!!') -> my-cool-project
+- planSlug('# Auth Refactor Plan') -> auth-refactor-plan
+- planSlug(no heading) uses first 50 chars kebab-cased
+- contentHash deterministic and 16-char lowercase hex output
+
+Additional versioning checks covered:
+- Same content saved twice deduplicates to one version.
+- Different content creates v1.md and v2.md.
+- getVersions returns version metadata with timestamps.
+- getVersion returns specific version content.

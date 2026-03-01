@@ -1,0 +1,52 @@
+Task 20 — Version Selector in Header
+=======================================
+
+STATUS: COMPLETE (pre-existing implementation verified + tests added)
+
+## Implementation
+
+1. **Sidebar Version Browser** (`ui/src/components/sidebar/VersionBrowser.tsx`)
+   - Shows current version info (e.g., "Version 3 of 5")
+   - Lists all versions except current, with relative timestamps
+   - "Compare Against" section to select diff base version
+   - "Show Changes" button activates plan diff view
+   - Selected version highlighted with primary color
+   - Loading/selecting states handled (spinner per version row)
+   - "Other Plans" collapsible section for project-level browsing
+
+2. **Sidebar Container** (`ui/src/components/sidebar/SidebarContainer.tsx`)
+   - Tab bar with "Contents" and "Versions" tabs
+   - Houses both TableOfContents and VersionBrowser views
+   - Toggleable via SidebarTabs when collapsed
+
+3. **Sidebar Tabs (collapsed)** (`ui/src/components/sidebar/SidebarTabs.tsx`)
+   - Two vertical tab flags visible when sidebar is closed
+   - TOC icon and Versions (clock) icon
+   - Blue dot indicator when diff is available (hasDiff prop)
+
+4. **App.tsx Integration** (lines ~402-431, ~1148-1205)
+   - `usePlanDiff` hook wired with currentPlan, previousPlan, versionInfo
+   - `useSidebar` hook manages sidebar open/tab state
+   - Version info fetched from /api/plan response (versionInfo, previousPlan)
+   - PlanDiffViewer replaces Viewer when isPlanDiffActive is true
+   - Version selector hidden when only 1 version (hasPreviousVersion check)
+
+5. **PlanDiffBadge** in Viewer top-left
+   - Shows +N/-N badge when previous version exists
+   - Click toggles diff view
+
+## Visibility Logic
+   - `hasPreviousVersion = versionInfo !== null && versionInfo.totalVersions > 1 && diffBasePlan !== null`
+   - Badge hidden when only 1 version
+   - Sidebar Versions tab always visible but shows "No version history available" when no versionInfo
+
+## Tests
+   - Version selector visibility tested in PlanDiffViewer.test.tsx:
+     - "should NOT show comparison when only 1 version" ✓
+     - "should show comparison when multiple versions exist" ✓
+     - "default base version is version - 1" ✓
+     - "version 1 has no base version" ✓
+
+## Build
+   - `npm run build` passes ✓
+   - No LSP errors

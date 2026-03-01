@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { enrichPlanData } from "./enrichment.ts";
+import { getVersion, getVersions, savePlan } from "./storage-versions.ts";
 
 type HookInput = {
   timestamp: number;
@@ -116,6 +117,7 @@ async function main(): Promise<void> {
   const hookInput = loadHookInput();
   const planData = enrichPlanData(hookInput);
   const html = loadHtml();
+  let planSaved = false;
 
   let settled = false;
   let resolveDecision: (decision: Decision) => void = () => {};
@@ -149,17 +151,26 @@ async function main(): Promise<void> {
     }
 
     if (req.method === "GET" && pathname === "/api/plan") {
+      if (!planSaved) {
+        savePlan(hookInput.cwd, planData.plan);
+        planSaved = true;
+      }
       writeJson(res, 200, planData);
       return;
     }
 
     if (req.method === "GET" && pathname === "/api/versions") {
-      writeJson(res, 200, { versions: [] });
+      const versions = getVersions(hookInput.cwd, planData.plan);
+      writeJson(res, 200, { versions });
       return;
     }
 
     if (req.method === "GET" && /^\/api\/version\/[^/]+$/.test(pathname)) {
-      writeJson(res, 200, { version: null });
+      const versionId = Number(pathname.split("/").pop());
+      const version = Number.isInteger(versionId)
+        ? getVersion(hookInput.cwd, planData.plan, versionId)
+        : null;
+      writeJson(res, 200, { version });
       return;
     }
 

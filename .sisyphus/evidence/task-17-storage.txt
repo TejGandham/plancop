@@ -1,0 +1,22 @@
+Task 17 - Storage module implementation evidence
+
+Implemented:
+- Added server/storage-versions.ts with built-in Node modules only (fs/path/crypto/os).
+- Added versioned plan persistence under ~/.plancop/history/{project-slug}/{plan-slug}/vN.md.
+- savePlan writes header metadata: <!-- hash:{hash} timestamp:{iso} --> and deduplicates by latest version hash.
+- Added retrieval APIs in module: getVersions and getVersion.
+
+Tests:
+- Added server/__tests__/storage-versions.test.ts (10 tests).
+- Ran: npx vitest run server/__tests__/storage-versions.test.ts
+  Result: 10 passed.
+
+Integration:
+- Wired server/index.ts to auto-save on first GET /api/plan request only.
+- Wired GET /api/versions and GET /api/version/:id to storage-versions module.
+
+Validation:
+- Ran: npx vitest run
+  Result: 13 files passed, 182 tests passed.
+- Ran: npm run build
+  Result: build completed successfully.
