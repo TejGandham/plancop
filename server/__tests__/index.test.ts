@@ -1,10 +1,14 @@
 // @ts-nocheck
 import { afterEach, describe, expect, it } from "vitest";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 type RunningServer = {
   process: ChildProcessWithoutNullStreams;
   port: number;
+  homeDir: string;
   getStdout: () => string;
   getStderr: () => string;
   waitForExit: () => Promise<number | null>;
@@ -12,12 +16,15 @@ type RunningServer = {
 
 const running: RunningServer[] = [];
 
-function startServer(planInput?: string): Promise<RunningServer> {
+function startServer(planInput?: string, extraEnv: Record<string, string> = {}): Promise<RunningServer> {
   return new Promise((resolve, reject) => {
-    const child = spawn("node", ["--experimental-strip-types", "server/index.ts"], {
+    const homeDir = mkdtempSync(join(tmpdir(), "plancop-index-test-home-"));
+    const child = spawn("npx", ["tsx", "server/index.ts"], {
       cwd: process.cwd(),
       env: {
         ...process.env,
+        HOME: homeDir,
+        ...extraEnv,
         PLAN_INPUT:
           planInput ??
           JSON.stringify({
@@ -49,6 +56,7 @@ function startServer(planInput?: string): Promise<RunningServer> {
         const server: RunningServer = {
           process: child,
           port: Number(match[1]),
+          homeDir,
           getStdout: () => stdout,
           getStderr: () => stderr,
           waitForExit: () =>
@@ -87,11 +95,15 @@ afterEach(async () => {
       (server) =>
         new Promise<void>((resolve) => {
           if (server.process.exitCode !== null || server.process.killed) {
+            rmSync(server.homeDir, { recursive: true, force: true });
             resolve();
             return;
           }
 
-          server.process.once("exit", () => resolve());
+          server.process.once("exit", () => {
+            rmSync(server.homeDir, { recursive: true, force: true });
+            resolve();
+          });
           server.process.kill("SIGTERM");
           setTimeout(() => {
             if (!server.process.killed) {
@@ -118,7 +130,48 @@ describe("server/index.ts", () => {
     const response = await fetch(`http://127.0.0.1:${server.port}/api/status`);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true });
+    expect(await response.json()).toMatchObject({ ok: true });
+  });
+
+  it("serves SSE stream on GET /api/events", async () => {
+    const server = await startServer(undefined, { PLANCOP_SESSION_MODE: "persistent" });
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/events`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    await response.body?.cancel();
+  });
+
+  it("handles POST /api/push-plan and returns decision", async () => {
+    const server = await startServer(undefined, { PLANCOP_SESSION_MODE: "persistent" });
+    const pushedInput = {
+      timestamp: 456,
+      cwd: "/tmp/project",
+      toolName: "create",
+      toolArgs: JSON.stringify({ file: "next.md", content: "# Next Plan" }),
+    };
+
+    const pushPromise = fetch(`http://127.0.0.1:${server.port}/api/push-plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pushedInput),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const planResponse = await fetch(`http://127.0.0.1:${server.port}/api/plan`);
+    const planBody = await planResponse.json();
+    expect(planBody).toMatchObject({ plan: "# Next Plan", timestamp: 456 });
+
+    await fetch(`http://127.0.0.1:${server.port}/api/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    const pushResponse = await pushPromise;
+    expect(pushResponse.status).toBe(200);
+    expect(await pushResponse.json()).toEqual({ permissionDecision: "allow" });
   });
 
   it("serves GET /api/plan", async () => {

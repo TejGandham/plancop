@@ -1,0 +1,243 @@
+
+ RUN  v3.2.4 /home/developer/source/plancop
+
+ ✓ mcp/__tests__/server.test.ts (6 tests) 570ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  21:54:05
+   Duration  1.71s (transform 58ms, setup 0ms, collect 48ms, tests 570ms, environment 592ms, prepare 100ms)
+
+{"jsonrpc":"2.0","result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"plancop","version":"1.0.0"}},"id":0}
+{"jsonrpc":"2.0","result":{"tools":[{"name":"submit_plan","description":"Submit a plan for human review. Opens browser UI for annotation and approval.","inputSchema":{"type":"object","properties":{"plan":{"type":"string","description":"The plan markdown text to review"}},"required":["plan"]}}]},"id":1}
+
+ RUN  v3.2.4 /home/developer/source/plancop
+
+ ✓ server/__tests__/config.test.ts (18 tests) 21ms
+ ✓ ui/src/utils/__tests__/sharing.test.ts (4 tests) 53ms
+ ✓ server/__tests__/enrichment.test.ts (6 tests) 14ms
+ ✓ server/__tests__/storage-versions.test.ts (10 tests) 258ms
+ ✓ ui/src/components/__tests__/ToolView.test.tsx (11 tests) 58ms
+ ❯ server/__tests__/index.test.ts (6 tests | 6 failed) 408ms
+   × server/index.ts > serves GET / 72ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+   × server/index.ts > serves GET /api/status 56ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+   × server/index.ts > serves GET /api/plan 54ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+   × server/index.ts > serves GET /api/versions and GET /api/version/:id 65ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+   × server/index.ts > handles POST /api/approve and exits with allow decision 91ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+   × server/index.ts > handles POST /api/deny and exits with deny decision 66ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+ ✓ server/__tests__/utils.test.ts (34 tests) 282ms
+ ✓ server/__tests__/session.test.ts (9 tests) 107ms
+ ✓ ui/src/components/__tests__/PlanDiffViewer.test.tsx (21 tests) 17ms
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > OLD BUGGY APPROACH: surroundContents fails with syntax-highlighted code
+Old approach created structure: <mark><span class="hljs-keyword">function</span> <span class="hljs-title">hello</span>() { }</mark>
+
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > NEW FIXED APPROACH: innerHTML replacement works with syntax-highlighted code
+New approach created clean structure: <mark class="annotation-highlight deletion" data-bind-id="codeblock-1772333653990">function hello() { }</mark>
+
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > removeHighlight restores syntax highlighting for code blocks
+After removeHighlight, restored: <span class="hljs-keyword">function</span> <span class="hljs-keyword">test()</span> <span class="hljs-keyword">{</span> <span class="hljs-keyword">}</span>
+
+ ✓ server/project.test.ts (21 tests) 50ms
+ ✓ ui/src/components/Viewer.test.tsx (15 tests) 70ms
+ ✓ ui/src/__tests__/shortcuts.test.ts (20 tests) 30ms
+ ✓ ui/src/utils/__tests__/annotationHelpers.test.ts (31 tests) 32ms
+ ✓ mcp/__tests__/server.test.ts (6 tests) 882ms
+ ✓ ui/src/utils/__tests__/parser.test.ts (14 tests) 21ms
+ ✓ server/__tests__/mode.test.ts (31 tests) 14ms
+ ✓ server/__tests__/hook.test.ts (10 tests) 14ms
+ ✓ ui/src/utils/__tests__/feedback.test.ts (6 tests) 9ms
+ ✓ src/types/__tests__/hook.test.ts (6 tests) 8ms
+ ✓ ui/src/__tests__/reviewApi.test.ts (2 tests) 9ms
+
+ Test Files  1 failed | 19 passed (20)
+      Tests  6 failed | 275 passed (281)
+   Start at  21:54:10
+   Duration  6.23s (transform 1.89s, setup 0ms, collect 4.06s, tests 2.36s, environment 14.60s, prepare 4.22s)
+
+
+> plancop@0.1.0 build
+> cd ui && vite build
+
+vite v7.3.1 building client environment for production...
+transforming...
+✓ 1900 modules transformed.
+rendering chunks...
+[plugin vite:singlefile] 
+
+[plugin vite:singlefile] Inlining: index-XUqxRAF-.js
+[plugin vite:singlefile] Inlining: style-SvgYRkpt.css
+computing gzip size...
+dist/index.html  5,056.67 kB │ gzip: 1,533.16 kB
+✓ built in 33.19s
+
+ RUN  v3.2.4 /home/developer/source/plancop
+
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > OLD BUGGY APPROACH: surroundContents fails with syntax-highlighted code
+Old approach created structure: <mark><span class="hljs-keyword">function</span> <span class="hljs-title">hello</span>() { }</mark>
+
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > NEW FIXED APPROACH: innerHTML replacement works with syntax-highlighted code
+New approach created clean structure: <mark class="annotation-highlight deletion" data-bind-id="codeblock-1772333747476">function hello() { }</mark>
+
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > removeHighlight restores syntax highlighting for code blocks
+After removeHighlight, restored: <span class="hljs-keyword">function</span> <span class="hljs-keyword">test()</span> <span class="hljs-keyword">{</span> <span class="hljs-keyword">}</span>
+
+ ✓ server/__tests__/session.test.ts (9 tests) 150ms
+ ✓ ui/src/components/Viewer.test.tsx (15 tests) 60ms
+ ✓ server/__tests__/storage-versions.test.ts (10 tests) 220ms
+ ✓ ui/src/components/__tests__/ToolView.test.tsx (11 tests) 51ms
+ ✓ server/__tests__/utils.test.ts (34 tests) 266ms
+ ✓ mcp/__tests__/server.test.ts (6 tests) 931ms
+ ✓ ui/src/utils/__tests__/sharing.test.ts (4 tests) 72ms
+ ✓ ui/src/utils/__tests__/annotationHelpers.test.ts (31 tests) 26ms
+ ✓ server/project.test.ts (21 tests) 55ms
+ ✓ ui/src/__tests__/shortcuts.test.ts (20 tests) 28ms
+ ✓ server/__tests__/config.test.ts (18 tests) 22ms
+ ✓ ui/src/utils/__tests__/parser.test.ts (14 tests) 21ms
+ ✓ ui/src/components/__tests__/PlanDiffViewer.test.tsx (21 tests) 34ms
+ ✓ server/__tests__/mode.test.ts (31 tests) 20ms
+ ✓ server/__tests__/hook.test.ts (10 tests) 34ms
+ ✓ ui/src/utils/__tests__/feedback.test.ts (6 tests) 17ms
+ ✓ server/__tests__/enrichment.test.ts (6 tests) 16ms
+ ✓ src/types/__tests__/hook.test.ts (6 tests) 7ms
+ ✓ ui/src/__tests__/reviewApi.test.ts (2 tests) 8ms
+ ❯ server/__tests__/index.test.ts (8 tests | 3 failed) 9708ms
+   ✓ server/index.ts > serves GET /  1794ms
+   ✓ server/index.ts > serves GET /api/status  1938ms
+   × server/index.ts > serves SSE stream on GET /api/events 1015ms
+     → expected 404 to be 200 // Object.is equality
+   × server/index.ts > handles POST /api/push-plan and returns decision 967ms
+     → expected { plan: 'new', toolName: 'edit', …(4) } to match object { plan: '# Next Plan', timestamp: 456 }
+(9 matching properties omitted from actual)
+   ✓ server/index.ts > serves GET /api/plan  1011ms
+   × server/index.ts > serves GET /api/versions and GET /api/version/:id 711ms
+     → expected { versions: [ { version: 1, …(2) } ] } to deeply equal { versions: [] }
+   ✓ server/index.ts > handles POST /api/approve and exits with allow decision  1158ms
+   ✓ server/index.ts > handles POST /api/deny and exits with deny decision  1111ms
+
+ Test Files  1 failed | 19 passed (20)
+      Tests  3 failed | 280 passed (283)
+   Start at  21:55:46
+   Duration  11.03s (transform 1.88s, setup 0ms, collect 4.16s, tests 11.75s, environment 14.88s, prepare 3.75s)
+
+{"jsonrpc":"2.0","result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"plancop","version":"1.0.0"}},"id":0}
+{"jsonrpc":"2.0","result":{"tools":[{"name":"submit_plan","description":"Submit a plan for human review. Opens browser UI for annotation and approval.","inputSchema":{"type":"object","properties":{"plan":{"type":"string","description":"The plan markdown text to review"}},"required":["plan"]}}]},"id":1}

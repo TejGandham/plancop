@@ -2,5 +2,6 @@
   "name": "plancop",
   "description": "Visual plan review for Copilot CLI — annotate, approve, or deny agent plans",
   "version": "0.1.0",
-  "hooks": ".github/hooks/plancop.json"
+  "hooks": ".github/hooks/plancop.json",
+  "mcpServers": ".mcp.json"
 }

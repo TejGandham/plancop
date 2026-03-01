@@ -1,0 +1,211 @@
+
+ RUN  v3.2.4 /home/developer/source/plancop
+
+ ✓ server/project.test.ts (21 tests) 35ms
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > OLD BUGGY APPROACH: surroundContents fails with syntax-highlighted code
+Old approach created structure: <mark><span class="hljs-keyword">function</span> <span class="hljs-title">hello</span>() { }</mark>
+
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > NEW FIXED APPROACH: innerHTML replacement works with syntax-highlighted code
+New approach created clean structure: <mark class="annotation-highlight deletion" data-bind-id="codeblock-1772333613068">function hello() { }</mark>
+
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > removeHighlight restores syntax highlighting for code blocks
+After removeHighlight, restored: <span class="hljs-keyword">function</span> <span class="hljs-keyword">test()</span> <span class="hljs-keyword">{</span> <span class="hljs-keyword">}</span>
+
+ ✓ ui/src/components/Viewer.test.tsx (15 tests) 73ms
+ ✓ server/__tests__/session.test.ts (9 tests) 148ms
+ ✓ server/__tests__/storage-versions.test.ts (10 tests) 166ms
+ ✓ ui/src/components/__tests__/ToolView.test.tsx (11 tests) 42ms
+ ❯ server/__tests__/index.test.ts (6 tests | 6 failed) 349ms
+   × server/index.ts > serves GET / 59ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+   × server/index.ts > serves GET /api/status 48ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+   × server/index.ts > serves GET /api/plan 53ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+   × server/index.ts > serves GET /api/versions and GET /api/version/:id 59ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+   × server/index.ts > handles POST /api/approve and exits with allow decision 68ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+   × server/index.ts > handles POST /api/deny and exits with deny decision 60ms
+     → Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+ ✓ server/__tests__/utils.test.ts (34 tests) 241ms
+ ✓ server/__tests__/enrichment.test.ts (6 tests) 37ms
+ ✓ ui/src/utils/__tests__/annotationHelpers.test.ts (31 tests) 58ms
+ ✓ server/__tests__/hook.test.ts (10 tests) 14ms
+stderr | ui/src/utils/__tests__/sharing.test.ts > sharing round-trip > handles invalid hash
+Failed to parse share hash: DOMException [InvalidCharacterError]: Invalid character
+[90m    at atob (node:buffer:1302:13)[39m
+    at decompress [90m(/home/developer/source/plancop/[39mui/src/utils/sharing.ts:85:18[90m)[39m
+    at parseShareHash [90m(/home/developer/source/plancop/[39mui/src/utils/sharing.ts:214:18[90m)[39m
+    at [90m/home/developer/source/plancop/[39mui/src/utils/__tests__/sharing.test.ts:41:18
+[90m    at processTicksAndRejections (node:internal/process/task_queues:105:5)[39m
+    at [90mfile:///home/developer/source/plancop/[39mnode_modules/[4m@vitest[24m/runner/dist/chunk-hooks.js:752:20
+
+ ✓ ui/src/utils/__tests__/sharing.test.ts (4 tests) 47ms
+ ✓ ui/src/utils/__tests__/parser.test.ts (14 tests) 17ms
+ ✓ ui/src/__tests__/shortcuts.test.ts (20 tests) 27ms
+ ✓ server/__tests__/config.test.ts (18 tests) 28ms
+ ✓ server/__tests__/mode.test.ts (31 tests) 19ms
+ ✓ ui/src/components/__tests__/PlanDiffViewer.test.tsx (21 tests) 25ms
+ ✓ src/types/__tests__/hook.test.ts (6 tests) 8ms
+ ✓ ui/src/utils/__tests__/feedback.test.ts (6 tests) 16ms
+ ✓ ui/src/__tests__/reviewApi.test.ts (2 tests) 11ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  server/__tests__/index.test.ts > server/index.ts > serves GET /
+ FAIL  server/__tests__/index.test.ts > server/index.ts > serves GET /api/status
+ FAIL  server/__tests__/index.test.ts > server/index.ts > serves GET /api/plan
+ FAIL  server/__tests__/index.test.ts > server/index.ts > serves GET /api/versions and GET /api/version/:id
+ FAIL  server/__tests__/index.test.ts > server/index.ts > handles POST /api/approve and exits with allow decision
+ FAIL  server/__tests__/index.test.ts > server/index.ts > handles POST /api/deny and exits with deny decision
+Error: Server exited early with code 1
+node:internal/modules/cjs/loader:1408
+  throw err;
+  ^
+
+Error: Cannot find module '/home/developer/source/plancop/server/index.ts'
+    at Function._resolveFilename (node:internal/modules/cjs/loader:1405:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1061:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1066:22)
+    at Function._load (node:internal/modules/cjs/loader:1215:37)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:151:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v23.11.1
+
+ ❯ ChildProcess.<anonymous> server/__tests__/index.test.ts:78:16
+     76|       if (!settled) {
+     77|         settled = true;
+     78|         reject(new Error(`Server exited early with code ${code}\n${std…
+       |                ^
+     79|       }
+     80|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+
+ Test Files  1 failed | 18 passed (19)
+      Tests  6 failed | 269 passed (275)
+   Start at  21:53:31
+   Duration  5.91s (transform 1.72s, setup 0ms, collect 3.85s, tests 1.36s, environment 13.39s, prepare 3.50s)
+

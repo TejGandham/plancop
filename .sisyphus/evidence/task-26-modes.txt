@@ -1,0 +1,30 @@
+T26 — PLANCOP_MODE Environment Variable
+========================================
+
+Created: server/mode.ts (32 lines)
+  - PlancopMode type: 'off' | 'auto' | 'always' | 'aggressive'
+  - getMode(): reads PLANCOP_MODE env var, defaults to 'auto', validates
+  - shouldIntercept(mode, toolName): mode × tool filtering logic
+  - Uses ReadonlySet for O(1) lookups, no `as any` or `@ts-ignore`
+
+Created: server/__tests__/mode.test.ts (156 lines, 31 test cases)
+  - getMode(): 7 tests (each valid mode, undefined, invalid, empty string)
+  - shouldIntercept() off mode: 6 tests (edit, create, write, bash, read, ls → all false)
+  - shouldIntercept() auto mode: 6 tests (edit/create/write → true; bash/read/ls → false)
+  - shouldIntercept() always mode: 6 tests (all → true, including unknown tools)
+  - shouldIntercept() aggressive mode: 6 tests (edit/create/write/bash → true; read/ls → false)
+
+Wired: server/index.ts
+  - Import getMode, shouldIntercept from ./mode.ts
+  - Defense-in-depth check in loadHookInput(): if tool not intercepted, allow and exit
+
+TDD Flow:
+  RED:   Tests failed (module not found) ✓
+  GREEN: 31/31 tests passed ✓
+
+Full Suite:
+  Test Files  16 passed (16)
+       Tests  237 passed (237)
+    Duration  7.87s
+
+No @ts-ignore, no as any. LSP diagnostics clean on all 3 files.

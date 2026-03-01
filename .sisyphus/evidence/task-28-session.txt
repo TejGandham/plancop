@@ -1,0 +1,46 @@
+
+ RUN  v3.2.4 /home/developer/source/plancop
+
+ ✓ ui/src/utils/__tests__/sharing.test.ts (4 tests) 35ms
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > OLD BUGGY APPROACH: surroundContents fails with syntax-highlighted code
+Old approach created structure: <mark><span class="hljs-keyword">function</span> <span class="hljs-title">hello</span>() { }</mark>
+
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > NEW FIXED APPROACH: innerHTML replacement works with syntax-highlighted code
+New approach created clean structure: <mark class="annotation-highlight deletion" data-bind-id="codeblock-1772333938837">function hello() { }</mark>
+
+stdout | ui/src/components/Viewer.test.tsx > Code Block Annotation Fix (PR #122) > removeHighlight restores syntax highlighting for code blocks
+After removeHighlight, restored: <span class="hljs-keyword">function</span> <span class="hljs-keyword">test()</span> <span class="hljs-keyword">{</span> <span class="hljs-keyword">}</span>
+
+ ✓ ui/src/components/Viewer.test.tsx (15 tests) 51ms
+ ✓ server/__tests__/storage-versions.test.ts (10 tests) 169ms
+ ✓ ui/src/components/__tests__/ToolView.test.tsx (11 tests) 57ms
+ ✓ server/__tests__/utils.test.ts (34 tests) 265ms
+ ✓ mcp/__tests__/server.test.ts (6 tests) 877ms
+ ✓ ui/src/utils/__tests__/annotationHelpers.test.ts (31 tests) 39ms
+ ✓ ui/src/components/__tests__/PlanDiffViewer.test.tsx (21 tests) 20ms
+ ✓ server/project.test.ts (21 tests) 39ms
+ ✓ server/__tests__/session.test.ts (9 tests) 97ms
+ ✓ ui/src/__tests__/shortcuts.test.ts (20 tests) 45ms
+ ✓ server/__tests__/config.test.ts (18 tests) 23ms
+ ✓ ui/src/utils/__tests__/parser.test.ts (14 tests) 21ms
+ ✓ server/__tests__/mode.test.ts (31 tests) 16ms
+ ✓ server/__tests__/hook.test.ts (10 tests) 14ms
+ ✓ server/__tests__/enrichment.test.ts (6 tests) 15ms
+ ✓ ui/src/utils/__tests__/feedback.test.ts (6 tests) 11ms
+ ✓ src/types/__tests__/hook.test.ts (6 tests) 7ms
+ ✓ ui/src/__tests__/reviewApi.test.ts (2 tests) 8ms
+ ✓ server/__tests__/index.test.ts (8 tests) 7360ms
+   ✓ server/index.ts > serves GET /  1610ms
+   ✓ server/index.ts > serves GET /api/status  1541ms
+   ✓ server/index.ts > serves SSE stream on GET /api/events  969ms
+   ✓ server/index.ts > handles POST /api/push-plan and returns decision  830ms
+   ✓ server/index.ts > serves GET /api/plan  614ms
+   ✓ server/index.ts > serves GET /api/versions and GET /api/version/:id  528ms
+   ✓ server/index.ts > handles POST /api/approve and exits with allow decision  624ms
+   ✓ server/index.ts > handles POST /api/deny and exits with deny decision  642ms
+
+ Test Files  20 passed (20)
+      Tests  283 passed (283)
+   Start at  21:58:57
+   Duration  8.57s (transform 1.48s, setup 0ms, collect 3.41s, tests 9.17s, environment 13.11s, prepare 3.65s)
+
