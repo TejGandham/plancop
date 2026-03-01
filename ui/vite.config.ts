@@ -3,7 +3,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import tailwindcss from '@tailwindcss/vite';
-import pkg from '../../package.json';
+import pkg from './package.json' assert { type: 'json' };
 
 export default defineConfig({
   server: {
@@ -11,15 +11,12 @@ export default defineConfig({
     host: '0.0.0.0',
   },
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(pkg.version || '0.0.1'),
   },
   plugins: [react(), tailwindcss(), viteSingleFile()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, '.'),
-      '@plannotator/ui': path.resolve(__dirname, '../../packages/ui'),
-      '@plannotator/editor/styles': path.resolve(__dirname, '../../packages/editor/index.css'),
-      '@plannotator/editor': path.resolve(__dirname, '../../packages/editor/App.tsx'),
+      '@': path.resolve(__dirname, '.')
     }
   },
   build: {

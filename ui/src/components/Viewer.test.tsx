@@ -5,7 +5,7 @@
  * Run: bun test packages/ui/components/Viewer.test.tsx
  */
 
-import { describe, test, expect, beforeAll } from "bun:test";
+import { describe, test, expect, beforeAll } from "vitest";
 import { parseMarkdownToBlocks } from "../utils/parser";
 import { Window } from 'happy-dom';
 

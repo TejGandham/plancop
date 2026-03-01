@@ -63,51 +63,86 @@ echo "plancop: intercepting $TOOL_NAME, launching review server..." >&2
 # (Server reads this instead of stdin since stdin is already consumed)
 export PLAN_INPUT="$INPUT"
 
-# Use pinned port for testing, otherwise random (server uses listen(0))
+# Bridge PLANCOP_PORT → server env (server also checks PLANCOP_PORT directly)
 if [ -n "${PLANCOP_PORT:-}" ]; then
   export PLANCOP_PORT
 fi
 
-# Temp file for server decision output
+# Temp files for capturing server output
 DECISION_FILE=$(mktemp /tmp/plancop-decision-XXXXXX.json)
+STDERR_FILE=$(mktemp /tmp/plancop-stderr-XXXXXX.log)
 
-# Cleanup on exit
-trap 'rm -f "$DECISION_FILE"' EXIT
+# Cleanup on exit (always, even on error)
+trap 'rm -f "$DECISION_FILE" "$STDERR_FILE"' EXIT
 
 # Determine script directory for relative server path
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SERVER_PATH="$SCRIPT_DIR/../server/index.js"
+SERVER_SCRIPT="$SCRIPT_DIR/plancop-server.ts"
 
-# Check if server exists
-if [ ! -f "$SERVER_PATH" ]; then
-  echo "plancop: WARNING: server not built yet at $SERVER_PATH" >&2
-  echo "plancop: Run 'npm install && npm run build' to build the server" >&2
+# Check if server script exists
+if [ ! -f "$SERVER_SCRIPT" ]; then
+  echo "plancop: WARNING: server script not found at $SERVER_SCRIPT" >&2
+  echo "plancop: Ensure plancop is properly installed" >&2
   # Fail open — allow the tool to proceed
   exit 0
 fi
 
-# Launch server, capture its decision JSON output
-# Server writes decision JSON to DECISION_FILE and port to stderr
-DECISION_TMPFILE="$DECISION_FILE" node "$SERVER_PATH" 2>&1 | while IFS= read -r line; do
-  # Extract port from server output "PLANCOP_PORT:XXXX"
-  if [[ "$line" =~ ^PLANCOP_PORT:([0-9]+)$ ]]; then
-    PORT="${BASH_REMATCH[1]}"
-    # Open browser
-    URL="http://127.0.0.1:$PORT"
-    echo "plancop: Review UI at $URL" >&2
-    if command -v xdg-open &>/dev/null; then
-      xdg-open "$URL" &>/dev/null &
-    elif command -v open &>/dev/null; then
-      open "$URL" &>/dev/null &
-    else
-      echo "plancop: Open this URL manually: $URL" >&2
-    fi
-  else
-    echo "plancop[server]: $line" >&2
+# Check if npx/tsx is available
+if ! command -v npx &>/dev/null; then
+  echo "plancop: WARNING: npx not found, cannot launch review server" >&2
+  exit 0
+fi
+
+# Launch server in background:
+#   stdout → DECISION_FILE (captures decision JSON only)
+#   stderr → STDERR_FILE  (captures PLANCOP_PORT:XXXX and debug output)
+npx tsx "$SERVER_SCRIPT" > "$DECISION_FILE" 2> "$STDERR_FILE" &
+SERVER_PID=$!
+
+# Wait for server to emit PLANCOP_PORT:XXXX on stderr (up to 100 × 0.1s = 10s)
+# tsx cold-start can take 3-5s on first run
+PORT=""
+for i in $(seq 1 100); do
+  PORT=$(grep -o 'PLANCOP_PORT:[0-9]*' "$STDERR_FILE" 2>/dev/null | head -1 | cut -d: -f2 || true)
+  [ -n "$PORT" ] && break
+  # Check if server already exited (error)
+  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    echo "plancop: WARNING: server exited unexpectedly" >&2
+    cat "$STDERR_FILE" >&2 2>/dev/null
+    # Fail open
+    exit 0
   fi
+  sleep 0.1
 done
 
-# Read decision from temp file
+if [ -z "$PORT" ]; then
+  echo "plancop: WARNING: could not detect server port (timeout)" >&2
+  cat "$STDERR_FILE" >&2 2>/dev/null
+  kill "$SERVER_PID" 2>/dev/null || true
+  # Fail open
+  exit 0
+fi
+
+# Open browser (or print URL if no display)
+URL="http://127.0.0.1:$PORT"
+echo "plancop: Review UI at $URL" >&2
+if command -v xdg-open &>/dev/null; then
+  xdg-open "$URL" &>/dev/null &
+elif command -v open &>/dev/null; then
+  open "$URL" &>/dev/null &
+else
+  echo "plancop: Open this URL manually: $URL" >&2
+fi
+
+# Wait for server to finish (it exits after approve/deny)
+wait "$SERVER_PID" 2>/dev/null || true
+
+# Relay any non-port stderr to our stderr for debugging
+grep -v '^PLANCOP_PORT:' "$STDERR_FILE" 2>/dev/null | while IFS= read -r line; do
+  echo "plancop[server]: $line" >&2
+done || true
+
+# Output decision to stdout (this is what Copilot CLI reads)
 if [ -f "$DECISION_FILE" ] && [ -s "$DECISION_FILE" ]; then
   cat "$DECISION_FILE"
 else

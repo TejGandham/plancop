@@ -5,7 +5,7 @@
  * Used by both Claude Code hook and OpenCode plugin.
  */
 
-import { $ } from "bun";
+import { execFileSync, spawnSync } from "child_process";
 
 export type DiffType =
   | "uncommitted"
@@ -35,8 +35,11 @@ export interface DiffResult {
  */
 export async function getCurrentBranch(): Promise<string> {
   try {
-    const result = await $`git rev-parse --abbrev-ref HEAD`.quiet();
-    return result.text().trim();
+    const stdout = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      encoding: "utf-8",
+      stdio: "pipe",
+    });
+    return stdout.trim();
   } catch {
     return "HEAD"; // Detached HEAD state
   }
@@ -53,20 +56,24 @@ export async function getCurrentBranch(): Promise<string> {
 export async function getDefaultBranch(): Promise<string> {
   // Try origin's HEAD first (most reliable for repos with remotes)
   try {
-    const result =
-      await $`git symbolic-ref refs/remotes/origin/HEAD`.quiet();
-    const ref = result.text().trim();
+    const stdout = execFileSync(
+      "git",
+      ["symbolic-ref", "refs/remotes/origin/HEAD"],
+      { encoding: "utf-8", stdio: "pipe" }
+    );
+    const ref = stdout.trim();
     return ref.replace("refs/remotes/origin/", "");
   } catch {
     // No remote or no HEAD set - check local branches
   }
 
   // Fallback: check if main exists locally
-  try {
-    await $`git show-ref --verify refs/heads/main`.quiet();
+  const result = spawnSync("git", ["show-ref", "--verify", "refs/heads/main"], {
+    encoding: "utf-8",
+    stdio: "pipe",
+  });
+  if (result.status === 0) {
     return "main";
-  } catch {
-    // main doesn't exist
   }
 
   // Final fallback
@@ -108,27 +115,42 @@ export async function runGitDiff(
   try {
     switch (diffType) {
       case "uncommitted":
-        patch = (await $`git diff HEAD`.quiet()).text();
+        patch = execFileSync("git", ["diff", "HEAD"], {
+          encoding: "utf-8",
+          stdio: "pipe",
+        });
         label = "Uncommitted changes";
         break;
 
       case "staged":
-        patch = (await $`git diff --staged`.quiet()).text();
+        patch = execFileSync("git", ["diff", "--staged"], {
+          encoding: "utf-8",
+          stdio: "pipe",
+        });
         label = "Staged changes";
         break;
 
       case "unstaged":
-        patch = (await $`git diff`.quiet()).text();
+        patch = execFileSync("git", ["diff"], {
+          encoding: "utf-8",
+          stdio: "pipe",
+        });
         label = "Unstaged changes";
         break;
 
       case "last-commit":
-        patch = (await $`git diff HEAD~1..HEAD`.quiet()).text();
+        patch = execFileSync("git", ["diff", "HEAD~1..HEAD"], {
+          encoding: "utf-8",
+          stdio: "pipe",
+        });
         label = "Last commit";
         break;
 
       case "branch":
-        patch = (await $`git diff ${defaultBranch}..HEAD`.quiet()).text();
+        patch = execFileSync("git", ["diff", `${defaultBranch}..HEAD`], {
+          encoding: "utf-8",
+          stdio: "pipe",
+        });
         label = `Changes vs ${defaultBranch}`;
         break;
 
@@ -138,7 +160,7 @@ export async function runGitDiff(
     }
   } catch (error) {
     // Handle errors gracefully (e.g., no commits yet, invalid ref)
-    console.error(`Git diff error for ${diffType}:`, error);
+    process.stderr.write(`Git diff error for ${diffType}: ${error}\n`);
     patch = "";
     label = `Error: ${diffType}`;
   }

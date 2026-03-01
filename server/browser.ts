@@ -2,7 +2,8 @@
  * Cross-platform browser opening utility
  */
 
-import { $ } from "bun";
+import { spawn } from "child_process";
+import { existsSync, readFileSync } from "fs";
 import os from "node:os";
 
 /**
@@ -19,9 +20,8 @@ async function isWSL(): Promise<boolean> {
 
   // Fallback: check /proc/version for WSL signature (if available)
   try {
-    const file = Bun.file("/proc/version");
-    if (await file.exists()) {
-      const content = await file.text();
+    if (existsSync("/proc/version")) {
+      const content = readFileSync("/proc/version", "utf-8");
       return (
         content.toLowerCase().includes("wsl") ||
         content.toLowerCase().includes("microsoft")
@@ -31,6 +31,27 @@ async function isWSL(): Promise<boolean> {
     // Ignore errors reading /proc/version
   }
   return false;
+}
+
+/**
+ * Spawn a detached process for browser opening (fire-and-forget).
+ * Returns true if the process was spawned without immediate error.
+ */
+function spawnBrowser(cmd: string, args: string[]): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      const child = spawn(cmd, args, {
+        detached: true,
+        stdio: "ignore",
+      });
+      child.unref();
+      child.on("error", () => resolve(false));
+      // Give the spawn a moment to detect immediate errors (e.g., ENOENT)
+      setTimeout(() => resolve(true), 100);
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 /**
@@ -51,23 +72,22 @@ export async function openBrowser(url: string): Promise<boolean> {
     if (browser) {
       const plannotatorBrowser = process.env.PLANNOTATOR_BROWSER;
       if (plannotatorBrowser && platform === "darwin") {
-        await $`open -a ${plannotatorBrowser} ${url}`.quiet();
+        return spawnBrowser("open", ["-a", plannotatorBrowser, url]);
       } else if ((platform === "win32" || wsl) && plannotatorBrowser) {
-        await $`cmd.exe /c start "" ${plannotatorBrowser} ${url}`.quiet();
+        return spawnBrowser("cmd.exe", ["/c", "start", "", plannotatorBrowser, url]);
       } else {
-        await $`${browser} ${url}`.quiet();
+        return spawnBrowser(browser, [url]);
       }
     } else {
       // Default system browser
       if (platform === "win32" || wsl) {
-        await $`cmd.exe /c start ${url}`.quiet();
+        return spawnBrowser("cmd.exe", ["/c", "start", url]);
       } else if (platform === "darwin") {
-        await $`open ${url}`.quiet();
+        return spawnBrowser("open", [url]);
       } else {
-        await $`xdg-open ${url}`.quiet();
+        return spawnBrowser("xdg-open", [url]);
       }
     }
-    return true;
   } catch {
     return false;
   }
