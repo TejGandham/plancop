@@ -1,0 +1,4 @@
+=== Task 4 QA: Passthrough ===
+plancop: preToolUse toolName=read
+plancop: read not in intercept list, passing through
+Exit code: 0

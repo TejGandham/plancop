@@ -1,0 +1,2 @@
+=== Task 2 QA: Plugin JSON ===
+name: plancop version: 0.1.0

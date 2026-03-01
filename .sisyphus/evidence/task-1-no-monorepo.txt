@@ -1,0 +1,6 @@
+=== Task 1 QA: No Monorepo Artifacts ===
+ls: cannot access 'packages/': No such file or directory
+ls: cannot access 'apps/': No such file or directory
+ls: cannot access 'bunfig.toml': No such file or directory
+bunfig.toml: correctly absent
+No workspace refs found

@@ -1,0 +1,15 @@
+=== Task 1 QA: Flat Structure ===
+ui/src/components/Viewer.tsx
+Viewer.tsx: OK
+ui/src/utils/parser.ts
+parser.ts: OK
+ui/src/App.tsx
+App.tsx: OK
+server/index.ts
+server/index.ts: OK
+ui/vite.config.ts
+vite.config.ts: OK
+ui/index.html
+index.html: OK
+ui/src/types.ts
+types.ts: OK

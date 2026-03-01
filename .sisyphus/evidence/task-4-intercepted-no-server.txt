@@ -1,0 +1,6 @@
+=== Task 4 QA: Intercepted Tool (edit) Without Server ===
+plancop: preToolUse toolName=edit
+plancop: intercepting edit, launching review server...
+plancop: WARNING: server not built yet at /home/developer/source/plancop/scripts/../server/index.js
+plancop: Run 'npm install && npm run build' to build the server
+Exit code: 0

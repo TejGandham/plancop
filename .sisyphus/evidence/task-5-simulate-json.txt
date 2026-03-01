@@ -1,0 +1,53 @@
+=== Task 5 QA: Simulate JSON Output ===
+{"timestamp":1772329292000,"cwd":"/home/developer/source/plancop","toolName":"edit","toolArgs":"{\"file\":\"src/auth/session.ts\",\"old_string\":\"import session from 'express-session';\\n\\nexport const sessionMiddleware = session({\\n  secret: process.env.SESSION_SECRET!,\\n  resave: false,\\n  saveUninitialized: false\\n});\",\"new_string\":\"import { jwtMiddleware } from './jwt.js';\\n\\n// Migrated from express-session to JWT\\nexport const sessionMiddleware = jwtMiddleware;\"}"}
+
+--- toolArgs type check ---
+toolName: edit
+toolArgs type: string
+toolArgs is string: true
+toolArgs parses: YES
+
+--- Sample toolArgs content ---
+file: src/auth/session.ts
+old_string length: 169
+new_string length: 130
+
+=== COMPREHENSIVE VALIDATION SUMMARY ===
+
+✓ test/simulate.sh
+  - Executable: YES
+  - Size: 1.7K
+  - Handles: edit, create, read, ls, view, bash tools
+  - Dry-run mode: WORKING
+  - JSON payload structure: VALID
+
+✓ test/fixtures/sample-plan.md
+  - Size: 2.0K (73 lines)
+  - Headings: H1, H2, H3 ✓
+  - Code blocks: 2x TypeScript ✓
+  - Mermaid diagram: 1x flowchart ✓
+  - Table: Acceptance Criteria ✓
+  - Blockquote: Risk Assessment ✓
+
+✓ test/fixtures/edit-args.json
+  - Valid JSON: YES
+  - Contains: file, old_string, new_string
+  - Target: src/auth/session.ts
+
+✓ test/fixtures/create-args.json
+  - Valid JSON: YES
+  - Contains: file, content
+  - Target: src/auth/jwt.ts
+
+✓ JSON Payload Structure (preToolUse hook format)
+  - timestamp: number (milliseconds) ✓
+  - cwd: string (dynamic, from pwd) ✓
+  - toolName: string ✓
+  - toolArgs: JSON STRING (double-encoded) ✓
+
+✓ Critical Requirement: toolArgs is a STRING
+  - NOT an object
+  - Properly JSON.stringify'd
+  - Can be parsed back to object
+  - Matches Copilot CLI preToolUse hook spec
+

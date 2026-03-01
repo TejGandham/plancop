@@ -1,0 +1,2 @@
+=== Task 2 QA: Hooks JSON ===
+version: 1 timeoutSec: 86400

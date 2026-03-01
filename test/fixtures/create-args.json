@@ -1,0 +1,4 @@
+{
+  "file": "src/auth/jwt.ts",
+  "content": "import jwt from 'jsonwebtoken';\nimport type { JWTPayload } from '../types/auth.js';\n\nexport function signToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {\n  return jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '7d' });\n}\n\nexport function verifyToken(token: string): JWTPayload {\n  return jwt.verify(token, process.env.JWT_SECRET!) as JWTPayload;\n}\n"
+}

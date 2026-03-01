@@ -1,0 +1,97 @@
+=== Task 3 QA: Types Created ===
+src/types/hook.ts
+hook.ts: OK
+src/types/annotation.ts
+annotation.ts: OK
+src/types/plan.ts
+plan.ts: OK
+src/types/index.ts
+index.ts: OK
+src/types/__tests__/hook.test.ts
+hook.test.ts: OK
+
+Type guard function present:
+export function isValidPreToolUseInput(value: unknown): value is PreToolUseInput {
+
+File sizes:
+  24 src/types/annotation.ts
+  51 src/types/hook.ts
+   3 src/types/index.ts
+  19 src/types/plan.ts
+  36 src/types/__tests__/hook.test.ts
+ 133 total
+=== Verifying hook.ts structure ===
+export interface PreToolUseInput {
+export interface EditToolArgs {
+export interface CreateToolArgs {
+export interface BashToolArgs {
+export interface HookDecision {
+export function isValidPreToolUseInput(value: unknown): value is PreToolUseInput {
+
+=== Verifying annotation.ts structure ===
+export type AnnotationType =
+export interface HighlightMeta {
+export interface Annotation {
+  type: AnnotationType;
+
+=== Verifying plan.ts imports ===
+import type { EditToolArgs, CreateToolArgs } from './hook.js';
+import type { Annotation } from './annotation.js';
+
+
+=== Verifying index.ts barrel exports ===
+export * from './hook.js';
+export * from './annotation.js';
+export * from './plan.js';
+
+=== Verifying test file structure ===
+import { describe, it, expect } from 'vitest';
+describe('isValidPreToolUseInput', () => {
+  it('accepts valid hook input', () => {
+  it('rejects missing timestamp', () => {
+  it('rejects missing cwd', () => {
+  it('rejects toolArgs as object (must be string — double-parse gotcha)', () => {
+  it('rejects null', () => {
+  it('rejects empty object', () => {
+=== Checking for 'any' type usage ===
+✓ No 'any' types found
+
+=== Checking for 'ask' in HookDecision ===
+✓ No 'ask' in HookDecision
+
+=== Verifying double-parse comment in hook.ts ===
+ * CRITICAL: toolArgs is a JSON STRING — must be parsed twice (double-parse).
+
+=== Verifying test coverage for double-parse gotcha ===
+  it('rejects toolArgs as object (must be string — double-parse gotcha)', () => {
+
+=== TASK 3 COMPLETION SUMMARY ===
+
+✓ All 5 type files created:
+  - src/types/hook.ts (51 lines)
+  - src/types/annotation.ts (24 lines)
+  - src/types/plan.ts (19 lines)
+  - src/types/index.ts (3 lines)
+  - src/types/__tests__/hook.test.ts (36 lines)
+
+✓ Type Guard Implementation:
+  - isValidPreToolUseInput() validates PreToolUseInput structure
+  - Proper type narrowing with 'value is PreToolUseInput'
+  - Rejects null, missing fields, and toolArgs as object (double-parse gotcha)
+
+✓ Quality Checks:
+  - Zero 'any' types (strict typing throughout)
+  - No 'ask' in HookDecision (only 'allow' | 'deny')
+  - Double-parse gotcha documented and tested
+  - ESM imports with .js extensions
+  - 6 comprehensive test cases in vitest format
+
+✓ Test Coverage:
+  - Valid hook input acceptance
+  - Missing timestamp rejection
+  - Missing cwd rejection
+  - Double-parse gotcha (toolArgs must be string)
+  - Null rejection
+  - Empty object rejection
+
+Ready for Wave 2 (TypeScript compilation and test execution).
