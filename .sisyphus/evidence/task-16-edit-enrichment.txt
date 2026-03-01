@@ -1,0 +1,35 @@
+Task: T16 - Create server/enrichment.ts with enrichPlanData(), wire into /api/plan
+Date: 2026-02-28
+
+Changes implemented:
+- Added server/enrichment.ts with:
+  - EXTENSION_MAP for language inference
+  - detectLanguage(filePath)
+  - enrichEditTool(args)
+  - enrichCreateTool(args)
+  - enrichPlanData(input)
+  - TOOL_ENRICHERS dispatch map for edit/create enrichment
+- Added tests in server/__tests__/enrichment.test.ts covering:
+  - enrichEditTool output shape including language
+  - enrichCreateTool output shape including language
+  - enrichPlanData edit path dispatch
+  - enrichPlanData create path dispatch
+  - malformed toolArgs handling without crash
+  - extension language mapping (.ts, .py, .js)
+- Updated server/index.ts:
+  - GET /api/plan now returns enrichPlanData(hookInput)
+- Updated import extensions for Node type-stripping runtime compatibility:
+  - server/index.ts imports ./enrichment.ts
+  - server/enrichment.ts imports ./hook.ts and ../src/types/hook.ts
+  - server/hook.ts imports ../src/types/hook.ts and ../src/types/plan.ts
+- Updated server/__tests__/index.test.ts expected /api/plan payload to include language in toolArgs.
+
+Verification commands run:
+1) npx vitest run server/__tests__/enrichment.test.ts
+   - PASS (6/6)
+2) npx vitest run
+   - PASS (104/104)
+
+Notes:
+- No new dependencies added.
+- /api/plan behavior preserved with enriched toolArgs metadata.

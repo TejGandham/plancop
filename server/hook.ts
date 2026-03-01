@@ -3,9 +3,9 @@ import type {
   EditToolArgs,
   HookDecision,
   PreToolUseInput,
-} from "../src/types/hook.js";
-import { isValidPreToolUseInput } from "../src/types/hook.js";
-import type { PlanData } from "../src/types/plan.js";
+} from "../src/types/hook.ts";
+import { isValidPreToolUseInput } from "../src/types/hook.ts";
+import type { PlanData } from "../src/types/plan.ts";
 
 const INVALID_INPUT_JSON_ERROR = "Invalid preToolUse input JSON";
 const INVALID_INPUT_SHAPE_ERROR = "Invalid preToolUse input shape";

@@ -1,0 +1,39 @@
+Task 15: Create ui/src/utils/feedback.ts and tests
+===================================================
+Date: 2026-02-28
+Status: COMPLETE
+
+Files Created:
+- ui/src/utils/feedback.ts (76 lines) — formatFeedback() implementation
+- ui/src/utils/__tests__/feedback.test.ts (146 lines) — 6 test cases
+
+Implementation Details:
+- Imports Annotation/AnnotationType from ui/src/types.ts (matches existing codebase convention)
+- Uses startOffset/endOffset as line references in output
+- Handles all 4 annotation types: DELETION, REPLACEMENT, COMMENT, INSERTION
+- Multi-line originalText properly quoted with > prefix per line
+- Global comments section omitted when empty
+- 0 annotations → clean "No annotations." output (no "0 annotations" text)
+
+Output Format:
+  PLAN REVIEW FEEDBACK
+  ====================
+  ## Annotations (N)
+  ### TYPE (line X-Y)
+  > [selected text]
+  [type-specific content]
+  ## Global Feedback
+  - [comment]
+
+Test Results:
+  ✓ returns clean output with 0 annotations
+  ✓ formats a single COMMENT annotation
+  ✓ formats mixed annotation types correctly (DELETION, REPLACEMENT, COMMENT, INSERTION)
+  ✓ appends global comments at end
+  ✓ formats 5 annotations with all present
+  ✓ omits Global Feedback section when no global comments
+
+  Test Files  1 passed (1)
+       Tests  6 passed (6)
+
+LSP Diagnostics: Clean (0 errors, 0 warnings) on both files

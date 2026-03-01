@@ -1,0 +1,23 @@
+Task: T14 — Wire Approve/Deny buttons to server API
+
+Changes made:
+- ui/src/App.tsx
+  - Imported formatFeedback from ./utils/feedback
+  - Added postApproveDecision() helper -> POST /api/approve
+  - Added postDenyDecision() helper -> formatFeedback(annotations, []) then POST /api/deny with { reason }
+  - Updated handleApprove/handleDeny to use the helpers
+  - Added review state gating (loading/reviewing/approved/denied)
+  - Rendered Approve/Deny controls only during reviewing state
+  - Kept submit-time button disabling via isSubmitting
+  - Updated confirmation title messages:
+    - "Plan approved ✓ — you can close this tab"
+    - "Plan denied — feedback sent to agent"
+
+- ui/src/__tests__/reviewApi.test.ts
+  - Test: approve sends POST /api/approve
+  - Test: deny sends POST /api/deny with formatted feedback in { reason }
+
+Verification:
+- Command: npx vitest run
+- Result: PASS
+- Summary: 11 test files passed, 151 tests passed

@@ -1,0 +1,90 @@
+T12 — Verify/adapt markdown rendering pipeline after Plannotator flatten
+=========================================================================
+Date: 2026-02-28
+
+## 1. @plannotator imports check
+
+Only one @plannotator import found in ui/src/:
+  - ui/src/components/Viewer.tsx:2  `import Highlighter from '@plannotator/web-highlighter'`
+  This is an npm package dependency (listed in ui/package.json as @plannotator/web-highlighter ^0.8.1).
+  No workspace:* refs remain. No changes needed.
+
+## 2. parser.ts verification
+
+File: ui/src/utils/parser.ts
+- Exports `parseMarkdownToBlocks()` — confirmed (line 70)
+- Exports `extractFrontmatter()` — confirmed (line 14)
+- Exports `exportAnnotations()` — confirmed (line 246)
+- Exports `exportLinkedDocAnnotations()` — confirmed (line 325)
+
+Tested with sample-plan fixture (test/fixtures/sample-plan.md):
+- Correctly parses headings (>=5), code blocks (>=3 incl. mermaid), table (1),
+  blockquotes (>=1), list items (>=3)
+- All blocks have IDs and startLine values
+- Mermaid block detected as type='code', language='mermaid'
+
+## 3. MermaidBlock.tsx verification
+
+File: ui/src/components/MermaidBlock.tsx
+- Imports `mermaid from 'mermaid'` — correct (line 2)
+- Initializes mermaid with `startOnLoad: false`, strict security, dark theme
+- Uses `mermaid.render()` in useEffect with proper error handling
+- Includes zoom/pan controls with wheel support
+- Error state renders source code as fallback
+
+## 4. Tests
+
+Existing: ui/src/components/Viewer.test.tsx — 15 tests (all passing)
+  Focus: code block annotation DOM manipulation, PR #122 regression tests
+
+Added: ui/src/utils/__tests__/parser.test.ts — 14 new tests covering:
+  - Code block language detection (typescript, rust, no-language)
+  - Mermaid block detection (standalone + fixture)
+  - Table parsing (standalone + fixture)
+  - Blockquote parsing (standalone + fixture)
+  - Full sample-plan block type distribution
+  - Block IDs and startLine validation
+  - Frontmatter extraction (no frontmatter, simple, arrays)
+
+Total test suite: 118 tests passing across 9 test files.
+
+## 5. Vite build
+
+Command: npm run build
+Result: SUCCESS
+Output: dist/index.html — 5,043.92 kB (gzip: 1,530.21 kB)
+Build time: 36.54s
+1893 modules transformed.
+
+The build uses vite-plugin-singlefile to inline all JS/CSS into index.html.
+Viewer component, MermaidBlock, parser, and highlight.js all bundled correctly.
+
+## 6. Visual verification (Playwright)
+
+Dev server started on http://localhost:3000 (Vite dev, port 3000 per vite.config.ts)
+Page title: "Plannotator"
+Screenshot saved: .sisyphus/evidence/task-12-markdown-render.png
+
+Observed in rendered page:
+- Headings rendered at multiple levels (h1, h2, h3)
+- Code blocks with syntax highlighting (TypeScript, SQL, JSON)
+- Mermaid diagram block present (shows source with toggle button)
+- List items with bullet markers and checkbox states
+- Table of contents sidebar functional
+- Annotation toolbar visible (Selection, Comment, Redline modes)
+- No render errors in page content
+
+Console warnings (non-blocking):
+- highlight.js warns about unescaped HTML in some code blocks (known upstream issue)
+- Missing favicon.ico (cosmetic)
+- No React errors
+
+## Summary
+
+The markdown rendering pipeline is fully operational after the Plannotator flatten:
+- No broken workspace imports
+- Parser correctly handles all block types including mermaid
+- MermaidBlock component correctly imports and initializes mermaid
+- All 118 tests pass (14 new parser tests added)
+- Vite build succeeds with all components bundled
+- Visual rendering confirmed via Playwright screenshot

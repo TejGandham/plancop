@@ -2,6 +2,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { enrichPlanData } from "./enrichment.ts";
 
 type HookInput = {
   timestamp: number;
@@ -111,25 +112,9 @@ function loadHtml(): string {
   }
 }
 
-function getPlanContent(toolName: string, toolArgs: Record<string, unknown>): string {
-  if (toolName === "edit" && typeof toolArgs.new_string === "string") {
-    return toolArgs.new_string;
-  }
-
-  if (toolName === "create" && typeof toolArgs.content === "string") {
-    return toolArgs.content;
-  }
-
-  if (typeof toolArgs.plan === "string") {
-    return toolArgs.plan;
-  }
-
-  return "";
-}
-
 async function main(): Promise<void> {
   const hookInput = loadHookInput();
-  const parsedToolArgs = safeParseJson(hookInput.toolArgs);
+  const planData = enrichPlanData(hookInput);
   const html = loadHtml();
 
   let settled = false;
@@ -164,13 +149,7 @@ async function main(): Promise<void> {
     }
 
     if (req.method === "GET" && pathname === "/api/plan") {
-      writeJson(res, 200, {
-        plan: getPlanContent(hookInput.toolName, parsedToolArgs),
-        toolName: hookInput.toolName,
-        toolArgs: parsedToolArgs,
-        cwd: hookInput.cwd,
-        timestamp: hookInput.timestamp,
-      });
+      writeJson(res, 200, planData);
       return;
     }
 

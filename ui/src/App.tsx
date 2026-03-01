@@ -45,6 +45,7 @@ import { SidebarTabs } from './components/sidebar/SidebarTabs';
 import { SidebarContainer } from './components/sidebar/SidebarContainer';
 import { PlanDiffViewer } from './components/plan-diff/PlanDiffViewer';
 import type { PlanDiffMode } from './components/plan-diff/PlanDiffModeSwitcher';
+import { formatFeedback } from './utils/feedback';
 
 const PLAN_CONTENT = `# Implementation Plan: Real-time Collaboration
 
@@ -339,6 +340,27 @@ export const CursorOverlay: React.FC<CursorOverlayProps> = ({
 **Target:** Ship MVP in next sprint
 `;
 
+type FetchImpl = typeof fetch;
+
+export async function postApproveDecision(fetchImpl: FetchImpl = fetch): Promise<void> {
+  await fetchImpl('/api/approve', { method: 'POST' });
+}
+
+export async function postDenyDecision(
+  annotations: Annotation[],
+  fetchImpl: FetchImpl = fetch
+): Promise<string> {
+  const reason = formatFeedback(annotations, []);
+
+  await fetchImpl('/api/deny', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  });
+
+  return reason;
+}
+
 const App: React.FC = () => {
   const [markdown, setMarkdown] = useState(PLAN_CONTENT);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -586,61 +608,26 @@ const App: React.FC = () => {
     }
   };
 
+  const reviewState = isLoading
+    ? 'loading'
+    : submitted === 'approved'
+      ? 'approved'
+      : submitted === 'denied'
+        ? 'denied'
+        : 'reviewing';
+
+  const canSubmitReviewActions = isApiMode && !linkedDocHook.isActive && reviewState === 'reviewing';
+
   // API mode handlers
   const handleApprove = async () => {
+    if (!canSubmitReviewActions || isSubmitting) {
+      return;
+    }
+
     setIsSubmitting(true);
+
     try {
-      const obsidianSettings = getObsidianSettings();
-      const bearSettings = getBearSettings();
-      const agentSwitchSettings = getAgentSwitchSettings();
-      const planSaveSettings = getPlanSaveSettings();
-
-      // Build request body - include integrations if enabled
-      const body: { obsidian?: object; bear?: object; feedback?: string; agentSwitch?: string; planSave?: { enabled: boolean; customPath?: string }; permissionMode?: string } = {};
-
-      // Include permission mode for Claude Code
-      if (origin === 'claude-code') {
-        body.permissionMode = permissionMode;
-      }
-
-      // Include agent switch setting for OpenCode (effective name handles custom agents)
-      const effectiveAgent = getEffectiveAgentName(agentSwitchSettings);
-      if (effectiveAgent) {
-        body.agentSwitch = effectiveAgent;
-      }
-
-      // Include plan save settings
-      body.planSave = {
-        enabled: planSaveSettings.enabled,
-        ...(planSaveSettings.customPath && { customPath: planSaveSettings.customPath }),
-      };
-
-      const effectiveVaultPath = getEffectiveVaultPath(obsidianSettings);
-      if (obsidianSettings.enabled && effectiveVaultPath) {
-        body.obsidian = {
-          vaultPath: effectiveVaultPath,
-          folder: obsidianSettings.folder || 'plannotator',
-          plan: markdown,
-        };
-      }
-
-      if (bearSettings.enabled) {
-        body.bear = { plan: markdown };
-      }
-
-      // Include annotations as feedback if any exist (for OpenCode "approve with notes")
-      const hasDocAnnotations = Array.from(linkedDocHook.getDocAnnotations().values()).some(
-        (d) => d.annotations.length > 0 || d.globalAttachments.length > 0
-      );
-      if (annotations.length > 0 || globalAttachments.length > 0 || hasDocAnnotations) {
-        body.feedback = annotationsOutput;
-      }
-
-      await fetch('/api/approve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      await postApproveDecision();
       setSubmitted('approved');
     } catch {
       setIsSubmitting(false);
@@ -648,20 +635,14 @@ const App: React.FC = () => {
   };
 
   const handleDeny = async () => {
+    if (!canSubmitReviewActions || isSubmitting) {
+      return;
+    }
+
     setIsSubmitting(true);
+
     try {
-      const planSaveSettings = getPlanSaveSettings();
-      await fetch('/api/deny', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          feedback: annotationsOutput,
-          planSave: {
-            enabled: planSaveSettings.enabled,
-            ...(planSaveSettings.customPath && { customPath: planSaveSettings.customPath }),
-          },
-        })
-      });
+      await postDenyDecision(annotations);
       setSubmitted('denied');
     } catch {
       setIsSubmitting(false);
@@ -952,7 +933,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1 md:gap-2">
-            {isApiMode && !linkedDocHook.isActive && (
+            {canSubmitReviewActions && (
               <>
                 <button
                   onClick={() => {
@@ -1362,13 +1343,19 @@ const App: React.FC = () => {
         {/* Completion overlay - shown after approve/deny */}
         <CompletionOverlay
           submitted={submitted}
-          title={submitted === 'approved' ? 'Plan Approved' : annotateMode ? 'Annotations Sent' : 'Feedback Sent'}
+          title={
+            submitted === 'approved'
+              ? 'Plan approved ✓ — you can close this tab'
+              : annotateMode
+                ? 'Annotations Sent'
+                : 'Plan denied — feedback sent to agent'
+          }
           subtitle={
             submitted === 'approved'
-              ? `${agentName} will proceed with the implementation.`
+              ? ''
               : annotateMode
                 ? `${agentName} will address your annotations on the file.`
-                : `${agentName} will revise the plan based on your annotations.`
+                : ''
           }
           agentLabel={agentName}
         />
