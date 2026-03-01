@@ -4,27 +4,22 @@ Visual plan review for Copilot CLI — annotate, approve, or deny agent plans wi
 
 ## What is Plancop?
 
-Plancop is a plan review plugin for Copilot CLI that intercepts tool calls (edit, create, write, bash) and opens a browser UI for visual inspection. Review the agent's proposed changes, add annotations, and approve or deny the plan. Annotations are sent back to the agent for refinement.
+Plancop intercepts Copilot CLI tool calls (edit, create, write, bash) via a `preToolUse` hook and opens a browser UI for visual inspection. Review the agent's proposed changes, add annotations, and approve or deny the plan. Annotations are sent back to the agent for refinement.
+
+It also works as an MCP server for Claude Desktop and other MCP clients.
 
 ## Installation
 
-### Via Plugin Registry (Recommended)
-
-```bash
-copilot plugin install plancop
-```
-
-### Manual Installation
-
 1. Clone the repository:
    ```bash
-   git clone https://github.com/backnotprop/plancop.git
+   git clone https://github.com/TejGandham/plancop.git
    cd plancop
    ```
 
 2. Install dependencies:
    ```bash
    npm install
+   cd ui && npm install && cd ..
    ```
 
 3. Build the UI:
@@ -32,32 +27,37 @@ copilot plugin install plancop
    npm run build
    ```
 
-4. Register with Copilot CLI:
-   ```bash
-   copilot plugin install ./
-   ```
-
-### Global NPM Installation
-
-```bash
-npm install -g plancop
-copilot plugin install $(npm root -g)/plancop
-```
+4. Register the hook with Copilot CLI by adding the plugin path to your Copilot CLI configuration. The hook is defined in `.github/hooks/plancop.json`.
 
 ## Usage
 
 ### How It Works
 
-1. **Hook Integration**: Plancop registers a `preToolUse` hook with Copilot CLI
-2. **Interception**: When the agent calls edit/create/write/bash tools, the hook fires
-3. **Server Launch**: A Node.js server starts and opens a browser UI on `http://127.0.0.1:PORT`
-4. **Review**: You annotate the plan, then approve or deny
-5. **Feedback**: Your decision and annotations are sent back to the agent
+1. **Hook Registration**: Plancop registers a `preToolUse` hook with Copilot CLI (via `.github/hooks/plancop.json`)
+2. **Interception**: When the agent calls edit/create/write tools, `scripts/plan-review.sh` fires
+3. **Server Launch**: The hook spawns `server/index.ts`, which starts an HTTP server on an auto-assigned port
+4. **Review**: A browser opens with the plan UI — you annotate, then approve or deny
+5. **Feedback**: Your decision (and annotations) are returned to Copilot CLI, which forwards them to the agent
+
+### MCP Server
+
+Plancop also provides an MCP server (`mcp/server.js`) with a single tool: `submit_plan`. Configure it in your MCP client using `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "plancop": {
+      "command": "node",
+      "args": ["mcp/server.js"]
+    }
+  }
+}
+```
 
 ### UI Overview
 
 The Plancop UI displays:
-- **Left Panel**: Table of contents with headings and annotations
+- **Left Panel**: Table of contents with headings and annotation counts
 - **Center**: Markdown plan with syntax highlighting and inline annotations
 - **Right Panel**: Annotation details, edit history, and export options
 
@@ -80,16 +80,11 @@ The Plancop UI displays:
 
   ```bash
   export PLANCOP_MODE=aggressive
-  copilot plan
   ```
 
-- **PLANCOP_PORT** (default: auto-assigned)
-  - Specify a custom port for the review server
-  
-  ```bash
-  export PLANCOP_PORT=3000
-  copilot plan
-  ```
+- **PLANCOP_SESSION_MODE** (default: `persistent`)
+  - `ephemeral`: Server exits after one decision
+  - `persistent`: Server stays alive for 5 minutes, reused across tool calls
 
 ### Intercept List
 
@@ -107,6 +102,7 @@ In `aggressive` mode, also intercepts:
 
 ```bash
 npm install
+cd ui && npm install && cd ..
 ```
 
 ### Development Server
@@ -125,7 +121,7 @@ npm test
 
 Watch mode:
 ```bash
-npm test:watch
+npm run test:watch
 ```
 
 ### Building for Production
@@ -134,7 +130,7 @@ npm test:watch
 npm run build
 ```
 
-Output is in `ui/dist/`.
+Output is a single self-contained HTML file at `ui/dist/index.html`.
 
 ### Type Checking
 
@@ -149,11 +145,12 @@ npm run lint
 ```
 Copilot CLI
     ↓
-preToolUse Hook (plan-review.sh)
+preToolUse Hook (scripts/plan-review.sh)
     ↓
-Node.js Server (plancop-server.ts)
-    ├─ Reads tool call from stdin
-    ├─ Launches browser UI
+HTTP Server (server/index.ts)
+    ├─ Reads plan from PLAN_INPUT env var
+    ├─ Starts HTTP server on auto-assigned port
+    ├─ Opens browser UI
     ├─ Waits for user decision
     └─ Returns approve/deny to Copilot CLI
     ↓
@@ -169,94 +166,101 @@ Browser UI (React + Vite)
 ```
 plancop/
 ├── scripts/
-│   ├── plan-review.sh          # Copilot CLI hook entry point
-│   └── plancop-server.ts       # Node.js review server
-├── server/
-│   ├── index.ts                # Server main logic
-│   ├── review.ts               # Plan review handler
-│   ├── annotate.ts             # Annotation processing
-│   ├── browser.ts              # Browser launch
-│   ├── git.ts                  # Git integration
-│   ├── integrations.ts         # Obsidian, Bear, etc.
-│   └── __tests__/              # Server tests
-├── ui/
+│   └── plan-review.sh          # Copilot CLI hook entry point (bash)
+├── server/                      # HTTP server (zero npm deps, Node built-ins only)
+│   ├── index.ts                 # Main server — routes, SSE, lifecycle
+│   ├── enrichment.ts            # Tool arg enrichment, language detection
+│   ├── hook.ts                  # Hook input parsing, decision serialization
+│   ├── mode.ts                  # Interception mode logic
+│   ├── session.ts               # PID file, inactivity timeout
+│   ├── storage-versions.ts      # Plan version history
+│   ├── config.ts                # Config from .plancop/config.json
+│   └── __tests__/               # Server tests (child-process spawn pattern)
+├── mcp/                          # MCP stdio server (JSON-RPC 2.0)
+│   ├── server.js                 # Single tool: submit_plan
+│   └── __tests__/                # JSON-RPC protocol tests
+├── ui/                           # React UI (Vite single-file build)
 │   ├── src/
-│   │   ├── App.tsx             # Main React component
-│   │   ├── components/         # UI components
-│   │   ├── hooks/              # React hooks
-│   │   ├── utils/              # Utilities
-│   │   └── __tests__/          # UI tests
-│   ├── index.html              # HTML entry point
-│   └── vite.config.ts          # Vite configuration
-├── test/
-│   └── fixtures/               # Test data
+│   │   ├── App.tsx               # Main React component
+│   │   ├── components/           # 32 UI components
+│   │   ├── hooks/                # 10 custom hooks
+│   │   ├── utils/                # 16 utilities
+│   │   └── __tests__/            # UI tests
+│   ├── index.html                # HTML entry point
+│   └── vite.config.ts            # Vite configuration
+├── src/types/                    # Shared TypeScript types
+├── test/fixtures/                # Test data
+├── .github/hooks/plancop.json    # preToolUse hook registration
+├── plugin.json                   # Copilot CLI plugin manifest
+├── .mcp.json                     # MCP server registration
 ├── package.json
 ├── tsconfig.json
-└── README.md
+└── vitest.config.ts
 ```
 
 ### Key Components
 
 **Server** (`server/index.ts`):
-- Starts HTTP server on auto-assigned port
-- Serves React UI
-- Handles `/api/plan` (GET) — returns plan data
+- Starts HTTP server on auto-assigned port (always port 0)
+- Serves React UI from `ui/dist/index.html`
+- Handles `/api/plan` (GET) — returns enriched plan data
 - Handles `/api/approve` (POST) — user approved
 - Handles `/api/deny` (POST) — user denied with feedback
-- Handles `/api/feedback` (POST) — annotation feedback
+- Handles `/api/push-plan` (POST) — accept new plan (persistent mode)
+- Handles `/api/events` (GET) — SSE stream for real-time updates
+
+**MCP Server** (`mcp/server.js`):
+- JSON-RPC 2.0 over stdio
+- Single tool: `submit_plan` — opens browser UI, waits for decision
+- Independent from `server/index.ts` (separate process, separate lifecycle)
 
 **UI** (`ui/src/App.tsx`):
 - Parses markdown plan into blocks
 - Manages annotations (create, edit, delete)
 - Exports to Obsidian, Bear, or downloads
 - Keyboard shortcuts for quick actions
-- Sharing via URL-encoded annotations
-
-**Integrations** (`server/integrations.ts`):
-- Obsidian vault integration
-- Bear notes integration
-- File system operations
+- URL-based sharing of annotated reviews
+- Plan version history and diff viewer
 
 ## Features
 
-- ✅ Visual plan review with syntax highlighting
-- ✅ Inline annotations with author tracking
-- ✅ Export to Obsidian, Bear, or download
-- ✅ Keyboard shortcuts for power users
-- ✅ URL-based sharing of reviews
-- ✅ Git integration (branch, repo info)
-- ✅ Image attachments support
-- ✅ Plan version history (when available)
-- ✅ Dark mode support
+- Visual plan review with syntax highlighting
+- Inline annotations with author tracking
+- Export to Obsidian, Bear, or download
+- Keyboard shortcuts for power users
+- URL-based sharing of reviews
+- Image attachments support
+- Plan version history with diff viewer
+- Dark mode support
+- MCP server for Claude Desktop integration
 
 ## Troubleshooting
 
 ### Server Won't Start
 
-Check that Node.js and npm are installed:
+Check that Node.js 22+ and npm are installed:
 ```bash
 node --version
 npm --version
+```
+
+Ensure the UI is built:
+```bash
+npm run build
 ```
 
 ### Browser Won't Open
 
 If the browser doesn't open automatically, manually visit the URL printed to stderr:
 ```
-plancop: Review UI at http://127.0.0.1:3000
+plancop: Review UI at http://127.0.0.1:<PORT>
 ```
+
+The port is auto-assigned — check the stderr output for the actual port number.
 
 ### Annotations Not Saved
 
 Ensure you click "Approve" or "Send Feedback" to submit your annotations. Closing the browser without submitting will discard changes.
-
-### Port Already in Use
-
-Specify a different port:
-```bash
-export PLANCOP_PORT=3001
-copilot plan
-```
 
 ## Contributing
 
@@ -271,9 +275,3 @@ Contributions are welcome! Please:
 ## License
 
 MIT — See LICENSE file for details.
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/backnotprop/plancop/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/backnotprop/plancop/discussions)
-- **Documentation**: [Plancop Docs](https://plannotator.ai)
