@@ -6,15 +6,17 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "build": "cd ui && vite build",
     "dev": "cd ui && vite dev",
     "lint": "tsc --noEmit"
   },
   "devDependencies": {
-    "typescript": "~5.8.2",
-    "vitest": "^3.2.0",
+    "@types/node": "^22.14.0",
+    "@vitest/coverage-v8": "^3.2.4",
     "happy-dom": "^17.0.0",
     "tsx": "^4.19.0",
-    "@types/node": "^22.14.0"
+    "typescript": "~5.8.2",
+    "vitest": "^3.2.0"
   }
 }
