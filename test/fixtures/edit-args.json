@@ -1,0 +1,5 @@
+{
+  "file": "src/auth/session.ts",
+  "old_string": "import session from 'express-session';\n\nexport const sessionMiddleware = session({\n  secret: process.env.SESSION_SECRET!,\n  resave: false,\n  saveUninitialized: false\n});",
+  "new_string": "import { jwtMiddleware } from './jwt.js';\n\n// Migrated from express-session to JWT\nexport const sessionMiddleware = jwtMiddleware;"
+}

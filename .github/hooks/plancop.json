@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [{
+      "type": "command",
+      "bash": "./scripts/plan-review.sh",
+      "timeoutSec": 86400,
+      "comment": "Plancop plan review — opens browser UI for edit/create tool calls"
+    }]
+  }
+}
