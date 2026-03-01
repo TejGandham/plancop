@@ -47,6 +47,7 @@ import { PlanDiffViewer } from './components/plan-diff/PlanDiffViewer';
 import type { PlanDiffMode } from './components/plan-diff/PlanDiffModeSwitcher';
 import { formatFeedback } from './utils/feedback';
 import { LoadingScreen } from './components/LoadingScreen';
+import { ToolView } from './components/ToolView';
 
 const PLAN_CONTENT = `# Implementation Plan: Real-time Collaboration
 
@@ -382,6 +383,8 @@ const App: React.FC = () => {
   });
   const [uiPrefs, setUiPrefs] = useState(() => getUIPreferences());
   const [isApiMode, setIsApiMode] = useState(false);
+  const [toolName, setToolName] = useState<string | null>(null);
+  const [toolArgs, setToolArgs] = useState<Record<string, unknown> | null>(null);
   const [origin, setOrigin] = useState<'claude-code' | 'opencode' | 'pi' | null>(null);
   const [globalAttachments, setGlobalAttachments] = useState<ImageAttachment[]>([]);
   const [annotateMode, setAnnotateMode] = useState(false);
@@ -504,9 +507,11 @@ const App: React.FC = () => {
         if (!res.ok) throw new Error('Not in API mode');
         return res.json();
       })
-      .then((data: { plan: string; origin?: 'claude-code' | 'opencode' | 'pi'; mode?: 'annotate'; sharingEnabled?: boolean; shareBaseUrl?: string; repoInfo?: { display: string; branch?: string }; previousPlan?: string | null; versionInfo?: { version: number; totalVersions: number; project: string } }) => {
+      .then((data: { plan: string; toolName?: string; toolArgs?: Record<string, unknown>; origin?: 'claude-code' | 'opencode' | 'pi'; mode?: 'annotate'; sharingEnabled?: boolean; shareBaseUrl?: string; repoInfo?: { display: string; branch?: string }; previousPlan?: string | null; versionInfo?: { version: number; totalVersions: number; project: string } }) => {
         setMarkdown(data.plan);
         setIsApiMode(true);
+        setToolName(typeof data.toolName === 'string' ? data.toolName : null);
+        setToolArgs(data.toolArgs && typeof data.toolArgs === 'object' ? data.toolArgs : null);
         if (data.mode === 'annotate') {
           setAnnotateMode(true);
         }
@@ -543,9 +548,50 @@ const App: React.FC = () => {
       .catch(() => {
         // Not in API mode - use default content
         setIsApiMode(false);
+        setToolName(null);
+        setToolArgs(null);
       })
       .finally(() => setIsLoading(false));
   }, [isLoadingShared, isSharedSession]);
+
+  useEffect(() => {
+    if (!isApiMode) return;
+
+    const eventSource = new EventSource('/api/events');
+    eventSource.onmessage = (event) => {
+      try {
+        const newPlanData = JSON.parse(event.data) as {
+          plan?: string;
+          toolName?: string;
+          toolArgs?: Record<string, unknown>;
+          previousPlan?: string | null;
+          versionInfo?: VersionInfo | null;
+        };
+
+        if (typeof newPlanData.plan === 'string') {
+          setMarkdown(newPlanData.plan);
+        }
+        setToolName(typeof newPlanData.toolName === 'string' ? newPlanData.toolName : null);
+        setToolArgs(newPlanData.toolArgs && typeof newPlanData.toolArgs === 'object' ? newPlanData.toolArgs : null);
+        if (newPlanData.previousPlan !== undefined) {
+          setPreviousPlan(newPlanData.previousPlan);
+        }
+        if (newPlanData.versionInfo !== undefined) {
+          setVersionInfo(newPlanData.versionInfo);
+        }
+
+        setSubmitted(null);
+        setIsSubmitting(false);
+        setAnnotations([]);
+        setSelectedAnnotationId(null);
+      } catch {
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [isApiMode]);
 
   useEffect(() => {
     const { frontmatter: fm } = extractFrontmatter(markdown);
@@ -1326,30 +1372,42 @@ const App: React.FC = () => {
                   baseVersion={planDiff.diffBaseVersion ?? undefined}
                 />
               ) : (
-                <Viewer
-                  key={linkedDocHook.isActive ? `doc:${linkedDocHook.filepath}` : 'plan'}
-                  ref={viewerRef}
-                  blocks={blocks}
-                  markdown={markdown}
-                  frontmatter={frontmatter}
-                  annotations={annotations}
-                  onAddAnnotation={handleAddAnnotation}
-                  onSelectAnnotation={setSelectedAnnotationId}
-                  selectedAnnotationId={selectedAnnotationId}
-                  mode={editorMode}
-                  taterMode={taterMode}
-                  globalAttachments={globalAttachments}
-                  onAddGlobalAttachment={handleAddGlobalAttachment}
-                  onRemoveGlobalAttachment={handleRemoveGlobalAttachment}
-                  repoInfo={repoInfo}
-                  stickyActions={uiPrefs.stickyActionsEnabled}
-                  planDiffStats={linkedDocHook.isActive ? null : planDiff.diffStats}
-                  isPlanDiffActive={isPlanDiffActive}
-                  onPlanDiffToggle={() => setIsPlanDiffActive(!isPlanDiffActive)}
-                  hasPreviousVersion={!linkedDocHook.isActive && planDiff.hasPreviousVersion}
-                  onOpenLinkedDoc={linkedDocHook.open}
-                  linkedDocInfo={linkedDocHook.isActive ? { filepath: linkedDocHook.filepath!, onBack: linkedDocHook.back } : null}
-                />
+                <>
+                  {isApiMode && toolName && toolArgs && (
+                    <ToolView
+                      toolName={toolName}
+                      toolArgs={toolArgs}
+                      className="mb-4"
+                    />
+                  )}
+
+                  {(!isApiMode || !toolName || markdown.trim().length > 0) && (
+                    <Viewer
+                      key={linkedDocHook.isActive ? `doc:${linkedDocHook.filepath}` : 'plan'}
+                      ref={viewerRef}
+                      blocks={blocks}
+                      markdown={markdown}
+                      frontmatter={frontmatter}
+                      annotations={annotations}
+                      onAddAnnotation={handleAddAnnotation}
+                      onSelectAnnotation={setSelectedAnnotationId}
+                      selectedAnnotationId={selectedAnnotationId}
+                      mode={editorMode}
+                      taterMode={taterMode}
+                      globalAttachments={globalAttachments}
+                      onAddGlobalAttachment={handleAddGlobalAttachment}
+                      onRemoveGlobalAttachment={handleRemoveGlobalAttachment}
+                      repoInfo={repoInfo}
+                      stickyActions={uiPrefs.stickyActionsEnabled}
+                      planDiffStats={linkedDocHook.isActive ? null : planDiff.diffStats}
+                      isPlanDiffActive={isPlanDiffActive}
+                      onPlanDiffToggle={() => setIsPlanDiffActive(!isPlanDiffActive)}
+                      hasPreviousVersion={!linkedDocHook.isActive && planDiff.hasPreviousVersion}
+                      onOpenLinkedDoc={linkedDocHook.open}
+                      linkedDocInfo={linkedDocHook.isActive ? { filepath: linkedDocHook.filepath!, onBack: linkedDocHook.back } : null}
+                    />
+                  )}
+                </>
               )}
             </div>
           </main>

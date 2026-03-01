@@ -1,0 +1,6 @@
+{
+  "intercept": ["edit", "create", "write"],
+  "ignore": ["read", "ls", "view"],
+  "autoApprove": [],
+  "theme": "dark"
+}

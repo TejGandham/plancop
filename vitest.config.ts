@@ -7,6 +7,7 @@ export default defineConfig({
     include: [
       'src/**/*.test.ts',
       'server/**/*.test.ts',
+      'mcp/**/*.test.ts',
       'test/**/*.test.ts',
       'ui/src/**/*.test.ts',
       'ui/src/**/*.test.tsx'
