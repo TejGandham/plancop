@@ -1,0 +1,52 @@
+TASK 23: KEYBOARD SHORTCUTS
+===========================
+
+IMPLEMENTATION SUMMARY:
+- Added Cmd/Ctrl+Shift+Enter shortcut to trigger deny/send feedback
+- Added Escape key handler to close modals and cancel annotations
+- Cmd/Ctrl+Enter (approve) was already implemented
+- Cmd/Ctrl+S (save to notes) was already implemented
+
+CHANGES MADE:
+
+1. ui/src/App.tsx
+   - Added useEffect hook for Cmd/Ctrl+Shift+Enter shortcut (lines ~732-770)
+     * Checks for Cmd/Ctrl + Shift + Enter combination
+     * Prevents default browser behavior
+     * Calls handleDeny() to send feedback
+     * Respects modal state and input field focus
+   
+   - Added useEffect hook for Escape key handler (lines ~772-830)
+     * Closes export modal
+     * Closes import modal
+     * Closes feedback prompt
+     * Closes Claude Code warning dialog
+     * Closes agent warning dialog
+     * Closes permission mode setup
+     * Closes UI features setup
+     * Closes plan diff marketing dialog
+     * Closes pending paste image annotator
+
+2. ui/src/__tests__/shortcuts.test.ts (NEW FILE)
+   - Test suite for all keyboard shortcuts
+   - Tests for Cmd/Ctrl+Enter (approve)
+   - Tests for Cmd/Ctrl+Shift+Enter (deny)
+   - Tests for Escape key (close modals)
+   - Tests for Cmd/Ctrl+S (save to notes)
+   - Tests for input/textarea focus handling
+   - Tests for listener registration/cleanup
+
+KEYBOARD SHORTCUTS REFERENCE:
+- Cmd/Ctrl+Enter: Approve plan (no annotations) or send feedback (with annotations)
+- Cmd/Ctrl+Shift+Enter: Send feedback/deny (always sends feedback)
+- Escape: Close any open modal or cancel annotation
+- Cmd/Ctrl+S: Save annotations to default notes app (Obsidian, Bear, or download)
+
+TESTING:
+- All shortcuts tested with vitest
+- Tests cover both Mac (Cmd) and Windows/Linux (Ctrl) variants
+- Tests verify input field focus handling
+- Tests verify modal state handling
+- Tests verify listener registration and cleanup
+
+STATUS: COMPLETE

@@ -1,0 +1,44 @@
+T24 — UI Polish
+================
+
+Changes made:
+
+1. Loading Screen (ui/src/components/LoadingScreen.tsx)
+   - New component: LoadingScreen — animated spinner with "Loading plan…" text
+   - New component: ErrorScreen — error icon + message + optional retry button
+   - Spinner: CSS-only, two overlapping circles (border + border-t-primary spinning)
+
+2. Error Boundary (ui/src/components/ErrorBoundary.tsx)
+   - React class component wrapping entire app tree
+   - Catches any React render/lifecycle errors
+   - Shows: error icon, "Something went wrong", error message, "Try Again" button
+   - Logs to console with componentStack for debugging
+
+3. App.tsx integration
+   - Added LoadingScreen import
+   - Conditional render: isLoading ? <LoadingScreen /> : <main content>
+   - Loading screen shows during /api/plan fetch
+   - After fetch completes (success or fail), transitions to content
+
+4. index.tsx integration
+   - Wrapped <App /> in <ErrorBoundary> inside <React.StrictMode>
+   - Any unhandled React error now shows friendly error UI instead of blank page
+
+5. Responsive layout (verified existing)
+   - Left sidebar: hidden below lg: breakpoint (SidebarContainer: "hidden lg:flex")
+   - Sidebar tabs: hidden below lg: breakpoint ("hidden lg:flex")
+   - Resize handles: hidden below lg: breakpoint ("hidden lg:block")
+   - Header buttons: icon-only on mobile, icon+text on md+ (md:hidden / hidden md:inline)
+   - Annotation panel: user-toggleable via header button (works at all sizes)
+   - Container padding: responsive (px-4 py-3 md:px-10 md:py-8 xl:px-16)
+
+Build verification:
+- vite build passes ✓
+- LSP diagnostics clean (0 errors) on all changed files ✓
+- Pre-existing test failures in shortcuts.test.ts (confirmed same before changes) ✓
+
+Playwright verification:
+- Navigate to http://localhost:3099/ → "Loading plan…" text visible ✓
+- After fetch completes → plan renders with full content ✓
+- Screenshot: .sisyphus/evidence/task-24-loading.png (loading state)
+- Screenshot: .sisyphus/evidence/task-24-polish.png (loaded state)

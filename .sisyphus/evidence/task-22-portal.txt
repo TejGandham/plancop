@@ -1,0 +1,44 @@
+T22 — Share Portal
+==================
+
+Created: portal/index.html — standalone static share viewer
+
+Implementation:
+- Self-contained HTML page (all JS/CSS inlined, ~360 lines)
+- Reads URL hash fragment on load via window.location.hash
+- Decompresses using DecompressionStream('deflate-raw') + base64url decode
+  (same algorithm as ui/src/utils/sharing.ts)
+- SharePayload format: { p: markdown, a: annotations[], g?: images[] }
+
+Markdown rendering (simplified, no external deps):
+- Headings (h1-h6), paragraphs, bold/italic/strikethrough
+- Unordered lists (-, *, +) with nesting
+- Ordered lists (1.) with nesting
+- Checkbox support ([ ] and [x])
+- Fenced code blocks with language class
+- Blockquotes, horizontal rules, tables
+- Links, images, inline code
+
+Annotation display:
+- Renders annotation cards below the plan
+- Shows type (Deletion/Replacement/Comment/Insertion/Global Comment)
+- Color-coded type labels
+- Original text, replacement/comment text, author
+
+States:
+- Loading spinner while decompressing
+- Empty hash: "No plan data in URL."
+- Bad hash: "Failed to load shared plan" with error details
+- Success: header + rendered plan + annotations
+
+Design:
+- Dark/light mode via prefers-color-scheme
+- Responsive (max-width: 860px, mobile padding adjustments)
+- Read-only: NO approve/deny buttons, NO annotation editing
+- Uses Inter + JetBrains Mono fonts
+
+Playwright verification:
+- Empty URL → shows "No plan data in URL." ✓
+- Compressed hash with test plan → renders headings, bold, lists, code, blockquote ✓
+- Annotations → shows 2 cards (Comment + Replacement) with type labels, text, author ✓
+- Screenshot: .sisyphus/evidence/task-22-portal.png

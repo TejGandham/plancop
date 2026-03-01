@@ -46,6 +46,7 @@ import { SidebarContainer } from './components/sidebar/SidebarContainer';
 import { PlanDiffViewer } from './components/plan-diff/PlanDiffViewer';
 import type { PlanDiffMode } from './components/plan-diff/PlanDiffModeSwitcher';
 import { formatFeedback } from './utils/feedback';
+import { LoadingScreen } from './components/LoadingScreen';
 
 const PLAN_CONTENT = `# Implementation Plan: Real-time Collaboration
 
@@ -728,6 +729,125 @@ const App: React.FC = () => {
     origin, getAgentWarning,
   ]);
 
+  // Cmd/Ctrl+Shift+Enter keyboard shortcut — deny/send feedback
+  useEffect(() => {
+    const handleDenyShortcut = (e: KeyboardEvent) => {
+      // Only handle Cmd/Ctrl+Shift+Enter
+      if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey) || !e.shiftKey) return;
+
+      // Don't intercept if typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      // Don't intercept if any modal is open
+      if (showExport || showImport || showFeedbackPrompt || showClaudeCodeWarning ||
+          showAgentWarning || showPermissionModeSetup || showUIFeaturesSetup || showPlanDiffMarketing || pendingPasteImage) return;
+
+      // Don't intercept if already submitted or submitting
+      if (submitted || isSubmitting) return;
+
+      // Don't intercept in demo/share mode (no API)
+      if (!isApiMode) return;
+
+      // Don't submit while viewing a linked doc
+      if (linkedDocHook.isActive) return;
+
+      e.preventDefault();
+
+      // Annotate mode: send feedback
+      if (annotateMode) {
+        handleAnnotateFeedback();
+        return;
+      }
+
+      // Always deny/send feedback
+      handleDeny();
+    };
+
+    window.addEventListener('keydown', handleDenyShortcut);
+    return () => window.removeEventListener('keydown', handleDenyShortcut);
+  }, [
+    showExport, showImport, showFeedbackPrompt, showClaudeCodeWarning, showAgentWarning,
+    showPermissionModeSetup, showUIFeaturesSetup, showPlanDiffMarketing, pendingPasteImage,
+    submitted, isSubmitting, isApiMode, linkedDocHook.isActive, annotateMode,
+  ]);
+
+  // Escape key — cancel annotation/close modals
+  useEffect(() => {
+    const handleEscapeKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+
+      // Close export modal
+      if (showExport) {
+        setShowExport(false);
+        e.preventDefault();
+        return;
+      }
+
+      // Close import modal
+      if (showImport) {
+        setShowImport(false);
+        e.preventDefault();
+        return;
+      }
+
+      // Close feedback prompt
+      if (showFeedbackPrompt) {
+        setShowFeedbackPrompt(false);
+        e.preventDefault();
+        return;
+      }
+
+      // Close Claude Code warning
+      if (showClaudeCodeWarning) {
+        setShowClaudeCodeWarning(false);
+        e.preventDefault();
+        return;
+      }
+
+      // Close agent warning
+      if (showAgentWarning) {
+        setShowAgentWarning(false);
+        e.preventDefault();
+        return;
+      }
+
+      // Close permission mode setup
+      if (showPermissionModeSetup) {
+        setShowPermissionModeSetup(false);
+        e.preventDefault();
+        return;
+      }
+
+      // Close UI features setup
+      if (showUIFeaturesSetup) {
+        setShowUIFeaturesSetup(false);
+        e.preventDefault();
+        return;
+      }
+
+      // Close plan diff marketing
+      if (showPlanDiffMarketing) {
+        setShowPlanDiffMarketing(false);
+        e.preventDefault();
+        return;
+      }
+
+      // Close pending paste image annotator
+      if (pendingPasteImage) {
+        handlePasteAnnotatorClose();
+        e.preventDefault();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleEscapeKey);
+    return () => window.removeEventListener('keydown', handleEscapeKey);
+  }, [
+    showExport, showImport, showFeedbackPrompt, showClaudeCodeWarning, showAgentWarning,
+    showPermissionModeSetup, showUIFeaturesSetup, showPlanDiffMarketing, pendingPasteImage,
+  ]);
+
   const handleAddAnnotation = (ann: Annotation) => {
     setAnnotations(prev => [...prev, ann]);
     setSelectedAnnotationId(ann.id);
@@ -897,6 +1017,9 @@ const App: React.FC = () => {
 
   return (
     <ThemeProvider defaultTheme="dark">
+      {isLoading ? (
+        <LoadingScreen />
+      ) : (
       <div className="h-screen flex flex-col bg-background overflow-hidden">
         {/* Tater sprites */}
         {taterMode && <TaterSpriteRunning />}
@@ -1407,6 +1530,7 @@ const App: React.FC = () => {
           }}
         />
       </div>
+      )}
     </ThemeProvider>
   );
 };

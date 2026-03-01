@@ -1,0 +1,43 @@
+Task 21 - URL sharing with deflate+base64url compression
+Date: 2026-02-28
+
+1) Added test file
+- Path: ui/src/utils/__tests__/sharing.test.ts
+- Tests added:
+  - round-trips payload
+  - round-trips empty annotations
+  - round-trips large payload (>10KB)
+  - handles invalid hash
+
+2) Targeted test run
+Command:
+npx vitest run ui/src/utils/__tests__/sharing.test.ts
+
+Result:
+- PASS
+- Test Files: 1 passed
+- Tests: 4 passed
+
+Notable stderr during invalid-hash case (expected behavior path):
+- "Failed to parse share hash: DOMException [InvalidCharacterError]: Invalid character"
+- parseShareHash still returned null as asserted.
+
+3) Full test suite run
+Command:
+npx vitest run
+
+Result:
+- FAIL (pre-existing unrelated failures)
+- 14 files passed, 1 file failed
+- 191 tests passed, 12 failed
+- Failing file: ui/src/__tests__/shortcuts.test.ts
+
+4) Additional verification
+- LSP diagnostics on changed file:
+  - /home/developer/source/plancop/ui/src/utils/__tests__/sharing.test.ts
+  - No diagnostics found.
+
+- UI build:
+  - Command: npm run build (workdir: ui)
+  - Result: PASS
+  - Warning only: vite config import assertion syntax warning (assert-to-with), build still completed successfully.
