@@ -167,9 +167,9 @@ Decision returned to Copilot CLI
 
 ## Troubleshooting
 
-**Server won't start** — Ensure Node.js 22+ is installed and the UI is built (`npm run build`).
+**"plancop ui not built"** — Run `npm run build` in the plancop directory. The UI must be built before first use.
 
-**Browser won't open** — Check stderr for the URL: `plancop: Review UI at http://127.0.0.1:<PORT>`
+**Browser won't open** — Check stderr for the URL: `plancop: Review UI at http://127.0.0.1:<PORT>`. The port is auto-assigned each time.
 
 **Annotations not saved** — You must click "Approve" or "Send Feedback". Closing the browser discards changes.
 
