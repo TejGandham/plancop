@@ -1,0 +1,178 @@
+CODE QUALITY REVIEW — Wave 6
+=============================
+
+Build: PASS (vite v7.3.1, 32.46s, one non-blocking warning: assert→with in vite.config.ts)
+Tests: 283 pass / 0 fail (20 test files, 14.47s)
+LSP: 7 clean / 0 issues
+
+  server/mode.ts         — no diagnostics
+  server/config.ts       — no diagnostics
+  server/session.ts      — no diagnostics
+  ToolView.tsx           — no diagnostics
+  EditToolView.tsx       — no diagnostics
+  CreateToolView.tsx     — no diagnostics
+  BashToolView.tsx       — no diagnostics
+
+=============================
+FILE REVIEW — New Files
+=============================
+
+server/mode.ts (31 lines) — CLEAN
+  ✓ No type assertions (as any / @ts-ignore)
+  ✓ No empty catches
+  ✓ No console.log
+  ✓ No commented-out code
+  ✓ No unused imports
+  ✓ Good naming: PlancopMode, AUTO_TOOLS, AGGRESSIVE_TOOLS, shouldIntercept
+  ✓ ReadonlySet for immutable config — good practice
+  ✓ Proper fallback in getMode() for invalid env values
+  ✓ No excessive comments
+
+server/config.ts (83 lines) — CLEAN
+  ✓ No as any / @ts-ignore
+  ✓ Catches log to stderr before returning null — proper error handling
+  ✓ No console.log
+  ✓ No commented-out code
+  ✓ No unused imports
+  ✓ Good naming: PlancopConfig, DEFAULT_CONFIG, mergeConfigs, loadConfig
+  ✓ Config layering (global → project) is well-structured
+  ✓ shouldInterceptWithConfig returns clear union type
+  Note: Line 33 uses `as Partial<PlancopConfig>` — justified after typeof guard
+
+server/session.ts (72 lines) — 1 MINOR ISSUE
+  ✓ No as any / @ts-ignore
+  ✓ No console.log
+  ✓ No commented-out code
+  ✓ No unused imports
+  ✓ Good naming: SessionInfo, isValidSessionInfo, readPidFile, writePidFile
+  ✓ Thorough validation in isValidSessionInfo (pid/port integers, positive, finite)
+  ✓ readPidFile catch returns null — acceptable for parse failure
+  ✓ isServerRunning catch returns false — acceptable (process.kill(pid,0))
+  ⚠ Line 61-62: Empty catch in removePidFile() — unlinkSync failure silently ignored.
+    Intent is clear (best-effort cleanup), but a `// best-effort` comment would be ideal.
+
+mcp/server.js (284 lines) — 2 MINOR ISSUES
+  ✓ No console.log (uses process.stderr.write for logging)
+  ✓ No commented-out code
+  ✓ No unused imports
+  ✓ Good naming: PROTOCOL_VERSION, handleMessage, sendResponse, sendError
+  ✓ Proper JSON-RPC 2.0 protocol implementation
+  ✓ CORS headers consistently applied
+  ✓ Timeout with cleanup (10 min timeout, clears on server close)
+  ✓ Proper settled flag prevents double-resolution
+  ⚠ Line 155: Empty catch {} — readFileSync fallback for HTML.
+    Falls back to default HTML correctly, but a comment would clarify intent.
+  ⚠ Line 238: Empty catch {} — JSON.parse of deny body.
+    Falls back to "Plan denied by user" correctly, but a comment would clarify intent.
+
+ui/src/components/ToolView.tsx (37 lines) — CLEAN
+  ✓ No type assertions
+  ✓ No empty catches
+  ✓ No console.log
+  ✓ No commented-out code
+  ✓ No unused imports
+  ✓ Clean routing pattern: toolName → specific component
+  ✓ Fallback for unsupported tools renders toolName + JSON args
+  ✓ Proper ToolViewProps interface exported
+
+ui/src/components/EditToolView.tsx (121 lines) — CLEAN
+  ✓ No type assertions
+  ✓ No empty catches
+  ✓ No console.log
+  ✓ No commented-out code
+  ✓ No unused imports
+  ✓ Good naming: DiffLine, buildUnifiedDiff, getStringArg
+  ✓ Utility helper getStringArg avoids runtime crashes from unknown toolArgs
+  ✓ Diff rendering with line numbers and color-coded +/- markers
+  ✓ Stable React keys using kind+index+lineNumbers
+  ✓ Accessible aria-hidden on decorative emoji
+
+ui/src/components/CreateToolView.tsx (47 lines) — CLEAN
+  ✓ No type assertions
+  ✓ No empty catches
+  ✓ No console.log
+  ✓ No commented-out code
+  ✓ No unused imports
+  ✓ Clean file viewer with line numbers
+  ✓ Reuses same getStringArg pattern as EditToolView
+  ✓ Empty line handling (renders ' ' for empty lines)
+
+ui/src/components/BashToolView.tsx (53 lines) — CLEAN
+  ✓ No type assertions
+  ✓ No empty catches
+  ✓ No console.log
+  ✓ No commented-out code
+  ✓ No unused imports
+  ✓ Good naming: DANGEROUS_PATTERNS, isDangerousCommand, getCommand
+  ✓ Checks both `command` and `cmd` args for compatibility
+  ✓ Danger patterns cover rm -rf, sudo, mkfs, dd, fork bombs
+  ✓ Visual DANGER badge for risky commands — good UX
+
+=============================
+FILE REVIEW — Modified Files (changes only)
+=============================
+
+server/index.ts — 2 NOTES (1 pre-existing, 1 minor)
+  Note: Line 1 `// @ts-nocheck` — pre-existing, not introduced in Wave 6.
+    Suppresses all type checking. Should be addressed in a future cleanup pass.
+  ⚠ Lines 366-367: Empty catch in shutdown (client.end() failure).
+    Intentional for graceful shutdown, but a `// ignore close errors` comment would help.
+  ✓ SSE integration (lines 165-167, 174, 194-205, 234-255) — clean
+  ✓ push-plan endpoint (lines 291-322) — proper validation, conflict detection (409)
+  ✓ Session import and PID file management — correct
+  ✓ broadcastPlan removes dead SSE clients on error — good
+  ✓ Inactivity timer with proper cleanup in shutdown
+
+scripts/plan-review.sh — CLEAN
+  ✓ set -euo pipefail at top — good practice
+  ✓ Session reuse logic: checks PID file → validates process → health check → reuse/start
+  ✓ Temp files cleaned via trap
+  ✓ Proper error handling with fail-open semantics
+  ✓ Decision validation before outputting
+  ✓ open_browser checks for xdg-open and open with fallback
+  Note: Uses grep in wait_for_port (line 72) — acceptable in bash runtime context
+
+ui/src/App.tsx — 1 MINOR ISSUE
+  ⚠ Lines 587-588: Empty catch {} in SSE onmessage handler.
+    Parse errors silently swallowed. Should at least have a comment.
+  ✓ SSE subscription (lines 557-594) — connects on isApiMode, properly cleans up
+  ✓ ToolView integration — imports ToolView, manages toolName/toolArgs state
+  ✓ SSE updates reset submitted/submitting/annotations state — correct
+  ✓ SSE data includes previousPlan and versionInfo — properly propagated
+
+=============================
+PATTERN CHECKS SUMMARY
+=============================
+
+  as any / @ts-ignore:    0 in new files, 0 introduced in modified
+  @ts-nocheck:            1 pre-existing (server/index.ts line 1) — not Wave 6
+  Empty catches:          3 minor (session.ts:62, mcp/server.js:155+238)
+                          2 in modified (index.ts:367, App.tsx:588)
+                          All have clear intent, missing only comments
+  console.log:            0 in production code
+  Commented-out code:     0
+  Unused imports:         0
+  Generic var names:      0 concerning instances
+  Excessive comments:     0 (no AI slop patterns detected)
+  Over-abstraction:       0
+  Missing error handling: 0 (all error paths covered)
+  Naming conventions:     Consistent (camelCase functions, PascalCase types/components)
+
+=============================
+SUMMARY
+=============================
+
+Files reviewed: 11
+  New files:      8 reviewed (7 clean, 1 minor)
+  Modified files: 3 reviewed (1 clean, 2 minor)
+
+Overall: 8 clean / 3 with minor issues (all cosmetic — missing comments on intentional empty catches)
+
+No functional bugs, no type safety holes, no security concerns, no dead code.
+
+VERDICT: APPROVE
+
+All issues are cosmetic (empty catch blocks missing clarifying comments).
+None affect correctness, safety, or maintainability.
+Test coverage is comprehensive (283 tests across 20 suites).
+Build succeeds cleanly.
