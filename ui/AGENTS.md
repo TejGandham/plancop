@@ -1,6 +1,6 @@
 # ui/ — React Review Interface
 
-React 19 single-page app. Vite 6 build with `vite-plugin-singlefile` — outputs one self-contained HTML file served by the Node server.
+React 19 single-page app. Vite 6 build with `vite-plugin-singlefile` — outputs one self-contained HTML file served by the Bun hook server or MCP server.
 
 **Stack:** React 19 · Vite 6 · Tailwind CSS 4 · highlight.js · mermaid · web-highlighter · perfect-freehand
 
@@ -12,15 +12,11 @@ ui/
 │   ├── App.tsx                    # Main component — 25+ useState, all state lives here
 │   ├── types.ts                   # UI-specific types (Annotation, Block, EditorMode)
 │   ├── index.css                  # Tailwind imports + custom styles
-│   ├── components/                # 32 components
+│   ├── components/                # ~28 components
 │   │   ├── Viewer.tsx             # Markdown viewer with web-highlighter annotations (700+ LOC)
 │   │   ├── Settings.tsx           # User preferences panel (500+ LOC)
 │   │   ├── AnnotationPanel.tsx    # Right sidebar — annotation list, edit, delete
 │   │   ├── TableOfContents.tsx    # Left sidebar — heading nav, annotation counts
-│   │   ├── ToolView.tsx           # Router: dispatches to Edit/Create/BashToolView
-│   │   ├── EditToolView.tsx       # Diff view for file edits
-│   │   ├── CreateToolView.tsx     # New file view with syntax highlighting
-│   │   ├── BashToolView.tsx       # Bash command display
 │   │   ├── ThemeProvider.tsx      # Dark/light/system theme context
 │   │   ├── ExportModal.tsx        # Export to Obsidian, Bear, or download
 │   │   ├── ImportModal.tsx        # Import annotations from share URL
@@ -60,7 +56,7 @@ ui/
 **No external library.** All state in `App.tsx` via 25+ `useState` hooks. Props flow down, callbacks flow up.
 
 Key state groups:
-- **Content**: `markdown`, `annotations`, `blocks`, `frontmatter`, `toolName`, `toolArgs`
+- **Content**: `markdown`, `annotations`, `blocks`, `frontmatter`
 - **UI**: `isPanelOpen`, `editorMode`, `taterMode`, `showExport`, `showImport`
 - **Features**: `isPlanDiffActive`, `planDiffMode`, `versionInfo`, `sharingEnabled`
 - **Submission**: `isSubmitting`, `submitted`, `showFeedbackPrompt`
@@ -77,7 +73,7 @@ Custom hooks isolate concerns: `useSharing` (URL sharing), `usePlanDiff` (versio
 | Persist setting | `src/utils/storage.ts` | Uses cookies — see below |
 | Add test | `src/__tests__/` or `src/components/__tests__/` | vi.fn() for fetch mock |
 | Change theme | `src/components/ThemeProvider.tsx` | CSS variables on \<html\> |
-| Add keyboard shortcut | `App.tsx` useEffect handlers (~L718, ~L779) | Check existing bindings first |
+| Add keyboard shortcut | `App.tsx` useEffect handlers | Check existing bindings first |
 | Modify build | `vite.config.ts` | Single-file output via viteSingleFile plugin |
 
 ## Conventions
@@ -106,7 +102,7 @@ expect(fetchMock).toHaveBeenCalledWith('/api/approve', { method: 'POST' });
 ```
 
 - Environment: happy-dom (via vitest.config.ts)
-- Component tests in `components/__tests__/` — Viewer, ToolView, PlanDiffViewer
+- Component tests in `components/__tests__/` — Viewer, PlanDiffViewer
 - API tests in `__tests__/` — shortcuts, reviewApi
 - No E2E tests
 
@@ -114,12 +110,11 @@ expect(fetchMock).toHaveBeenCalledWith('/api/approve', { method: 'POST' });
 
 These UI files have enforced thresholds (90% lines/funcs, 80% branches):
 - `utils/feedback.ts`, `utils/parser.ts`, `utils/annotationHelpers.ts`, `utils/planDiffEngine.ts`
-- `components/ToolView.tsx`, `EditToolView.tsx`, `CreateToolView.tsx`, `BashToolView.tsx`
 
 ## Gotchas
 
-- **App.tsx is 1600 LOC** — All state lives here. Read it before modifying any component.
+- **App.tsx is ~1600 LOC** — All state lives here. Read it before modifying any component.
 - **web-highlighter** — `@plannotator/web-highlighter` manages annotation DOM. Don't fight it.
 - **Build required** — Server reads `ui/dist/index.html`. Always `npm run build` after UI changes.
-- **No hot reload in production** — Dev server is `npm run dev` (port 5173). Production is served by Node server.
+- **No hot reload in production** — Dev server is `npm run dev` (port 5173). Production is served by hook server.
 - **Sprites** — Tater character animations in `public/sprite_package_*`. Not code — asset files.
