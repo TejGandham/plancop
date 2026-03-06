@@ -12,6 +12,7 @@ const INVALID_INPUT_SHAPE_ERROR = "Invalid preToolUse input shape";
 const INVALID_TOOL_ARGS_ERROR = "Invalid toolArgs JSON";
 
 export interface ToolArgsParseError {
+  _parseError: true;
   error: string;
 }
 
@@ -38,12 +39,12 @@ export function parseToolArgs(
     const parsed: unknown = JSON.parse(toolArgsStr);
 
     if (typeof parsed !== "object" || parsed === null) {
-      return { error: INVALID_TOOL_ARGS_ERROR };
+      return { _parseError: true, error: INVALID_TOOL_ARGS_ERROR };
     }
 
     return parsed as EditToolArgs | CreateToolArgs | Record<string, unknown>;
   } catch {
-    return { error: INVALID_TOOL_ARGS_ERROR };
+    return { _parseError: true, error: INVALID_TOOL_ARGS_ERROR };
   }
 }
 

@@ -71,7 +71,14 @@ describe("parseToolArgs", () => {
   it("returns error object for malformed inner JSON", () => {
     const toolArgs = parseToolArgs("not valid json");
 
-    expect(toolArgs).toEqual({ error: "Invalid toolArgs JSON" });
+    expect(toolArgs).toEqual({ _parseError: true, error: "Invalid toolArgs JSON" });
+  });
+
+  it("does not treat payload with 'error' field as parse error", () => {
+    const toolArgs = parseToolArgs('{"error":"some user error","file":"test.ts"}');
+
+    expect("_parseError" in toolArgs).toBe(false);
+    expect((toolArgs as Record<string, unknown>).error).toBe("some user error");
   });
 });
 
@@ -109,7 +116,7 @@ describe("buildPlanData", () => {
 
     const planData = buildPlanData(input);
 
-    expect(planData.toolArgs).toEqual({ error: "Invalid toolArgs JSON" });
+    expect(planData.toolArgs).toEqual({ _parseError: true, error: "Invalid toolArgs JSON" });
   });
 });
 

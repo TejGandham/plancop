@@ -10,6 +10,7 @@ export interface SessionInfo {
   pid: number;
   port: number;
   startedAt: number;
+  token?: string;
 }
 
 function isValidSessionInfo(value: unknown): value is SessionInfo {
@@ -26,7 +27,8 @@ function isValidSessionInfo(value: unknown): value is SessionInfo {
     Number.isInteger(session.port) &&
     session.port > 0 &&
     typeof session.startedAt === "number" &&
-    Number.isFinite(session.startedAt)
+    Number.isFinite(session.startedAt) &&
+    (session.token === undefined || typeof session.token === "string")
   );
 }
 
@@ -52,7 +54,7 @@ export function readPidFile(): SessionInfo | null {
 
 export function writePidFile(info: SessionInfo): void {
   ensureSessionDir();
-  writeFileSync(PID_FILE, JSON.stringify(info), "utf8");
+  writeFileSync(PID_FILE, JSON.stringify(info), { encoding: "utf8", mode: 0o600 });
 }
 
 export function removePidFile(): void {

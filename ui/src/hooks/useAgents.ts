@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getAgentSwitchSettings } from '../utils/agentSwitch';
+import { apiHeaders } from '../utils/auth';
 
 export interface Agent {
   id: string;
@@ -32,7 +33,7 @@ export function useAgents(origin: 'claude-code' | 'opencode' | 'pi' | null): Use
     if (origin !== 'opencode') return;
 
     setIsLoading(true);
-    fetch('/api/agents')
+    fetch('/api/agents', { headers: apiHeaders() })
       .then(res => res.json())
       .then((data: { agents?: Agent[] }) => {
         if (data.agents?.length) {

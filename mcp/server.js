@@ -5,6 +5,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { platform } from "node:os";
+import { randomUUID } from "node:crypto";
 
 const PROTOCOL_VERSION = "2024-11-05";
 
@@ -146,14 +147,19 @@ async function handleToolsCall(msg) {
 function launchReview(plan) {
   return new Promise((resolveReview) => {
     let settled = false;
+    const sessionToken = randomUUID();
 
     const htmlPath = resolve(import.meta.dirname, "../ui/dist/index.html");
-    let html = "<!doctype html><html><body><h1>plancop ui not built</h1></body></html>";
+    let rawHtml = "<!doctype html><html><head></head><body><h1>plancop ui not built</h1></body></html>";
     if (existsSync(htmlPath)) {
       try {
-        html = readFileSync(htmlPath, "utf8");
+        rawHtml = readFileSync(htmlPath, "utf8");
       } catch {}
     }
+    const html = rawHtml.replace(
+      "</head>",
+      `<script>window.__PLANCOP_TOKEN__="${sessionToken}";</script></head>`
+    );
 
     const planData = {
       plan,
@@ -163,16 +169,32 @@ function launchReview(plan) {
       timestamp: Date.now(),
     };
 
-    const headers = {
-      "Access-Control-Allow-Origin": "*",
+    let headers = {
+      "Access-Control-Allow-Origin": "http://127.0.0.1",
       "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization",
     };
+
+    function writeJsonMcp(res, status, body) {
+      res.writeHead(status, { "Content-Type": "application/json", ...headers });
+      res.end(JSON.stringify(body));
+    }
+
+    function checkAuth(req, url) {
+      let reqToken;
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        reqToken = authHeader.slice(7);
+      }
+      if (!reqToken && url.pathname === "/api/events") {
+        reqToken = url.searchParams.get("token") ?? undefined;
+      }
+      return reqToken === sessionToken;
+    }
 
     const server = createServer((req, res) => {
       if (!req.url || !req.method) {
-        res.writeHead(400, { "Content-Type": "application/json", ...headers });
-        res.end(JSON.stringify({ error: "Bad request" }));
+        writeJsonMcp(res, 400, { error: "Bad request" });
         return;
       }
 
@@ -190,23 +212,26 @@ function launchReview(plan) {
         return;
       }
 
+      // Auth check for all /api/* routes
+      if (url.pathname.startsWith("/api/") && !checkAuth(req, url)) {
+        writeJsonMcp(res, 401, { error: "Unauthorized" });
+        return;
+      }
+
       if (req.method === "GET" && url.pathname === "/api/plan") {
-        res.writeHead(200, { "Content-Type": "application/json", ...headers });
-        res.end(JSON.stringify(planData));
+        writeJsonMcp(res, 200, planData);
         return;
       }
 
       if (req.method === "GET" && url.pathname === "/api/status") {
-        res.writeHead(200, { "Content-Type": "application/json", ...headers });
-        res.end(JSON.stringify({ ok: true }));
+        writeJsonMcp(res, 200, { ok: true });
         return;
       }
 
       if (req.method === "POST" && url.pathname === "/api/approve") {
         if (!settled) {
           settled = true;
-          res.writeHead(200, { "Content-Type": "application/json", ...headers });
-          res.end(JSON.stringify({ ok: true }));
+          writeJsonMcp(res, 200, { ok: true });
           setTimeout(() => {
             server.close();
             resolveReview({ approved: true });
@@ -214,8 +239,7 @@ function launchReview(plan) {
           return;
         }
 
-        res.writeHead(200, { "Content-Type": "application/json", ...headers });
-        res.end(JSON.stringify({ ok: true }));
+        writeJsonMcp(res, 200, { ok: true });
         return;
       }
 
@@ -237,8 +261,7 @@ function launchReview(plan) {
               }
             } catch {}
 
-            res.writeHead(200, { "Content-Type": "application/json", ...headers });
-            res.end(JSON.stringify({ ok: true }));
+            writeJsonMcp(res, 200, { ok: true });
             setTimeout(() => {
               server.close();
               resolveReview({ approved: false, feedback });
@@ -246,24 +269,40 @@ function launchReview(plan) {
             return;
           }
 
-          res.writeHead(200, { "Content-Type": "application/json", ...headers });
-          res.end(JSON.stringify({ ok: true }));
+          writeJsonMcp(res, 200, { ok: true });
         });
         return;
       }
 
-      res.writeHead(404, { "Content-Type": "application/json", ...headers });
-      res.end(JSON.stringify({ error: "Not found" }));
+      writeJsonMcp(res, 404, { error: "Not found" });
+    });
+
+    server.on("error", (err) => {
+      if (!settled) {
+        settled = true;
+        resolveReview({ approved: false, feedback: `Server failed to start: ${err.message}` });
+      }
     });
 
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       if (!address || typeof address === "string") {
+        if (!settled) {
+          settled = true;
+          resolveReview({ approved: false, feedback: "Server address unavailable" });
+        }
         return;
       }
 
+      headers = {
+        "Access-Control-Allow-Origin": `http://127.0.0.1:${address.port}`,
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+      };
+
       const url = `http://127.0.0.1:${address.port}`;
       process.stderr.write(`plancop-mcp: Review UI at ${url}\n`);
+      process.stderr.write(`PLANCOP_TOKEN:${sessionToken}\n`);
 
       const openCommand = platform() === "darwin" ? "open" : "xdg-open";
       execFile(openCommand, [url], () => {});

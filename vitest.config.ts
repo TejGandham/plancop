@@ -13,6 +13,10 @@ export default defineConfig({
       'ui/src/**/*.test.tsx'
     ],
     exclude: ['node_modules', 'dist'],
+    environmentMatchGlobs: [
+      ['server/__tests__/index.test.ts', 'node'],
+      ['mcp/__tests__/server.test.ts', 'node'],
+    ],
     coverage: {
       provider: 'v8',
       include: [

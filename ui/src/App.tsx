@@ -344,8 +344,10 @@ export const CursorOverlay: React.FC<CursorOverlayProps> = ({
 
 type FetchImpl = typeof fetch;
 
+import { getAuthToken, apiHeaders } from './utils/auth';
+
 export async function postApproveDecision(fetchImpl: FetchImpl = fetch): Promise<void> {
-  await fetchImpl('/api/approve', { method: 'POST' });
+  await fetchImpl('/api/approve', { method: 'POST', headers: apiHeaders() });
 }
 
 export async function postDenyDecision(
@@ -356,7 +358,7 @@ export async function postDenyDecision(
 
   await fetchImpl('/api/deny', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: apiHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ reason }),
   });
 
@@ -502,7 +504,7 @@ const App: React.FC = () => {
     if (isLoadingShared) return; // Wait for share check to complete
     if (isSharedSession) return; // Already loaded from share
 
-    fetch('/api/plan')
+    fetch('/api/plan', { headers: apiHeaders() })
       .then(res => {
         if (!res.ok) throw new Error('Not in API mode');
         return res.json();
@@ -557,7 +559,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isApiMode) return;
 
-    const eventSource = new EventSource('/api/events');
+    const eventSource = new EventSource(`/api/events?token=${encodeURIComponent(getAuthToken())}`);
     eventSource.onmessage = (event) => {
       try {
         const newPlanData = JSON.parse(event.data) as {
@@ -635,7 +637,7 @@ const App: React.FC = () => {
         : pendingPasteImage.file;
       formData.append('file', fileToUpload);
 
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const res = await fetch('/api/upload', { method: 'POST', headers: apiHeaders(), body: formData });
       if (res.ok) {
         const data = await res.json();
         setGlobalAttachments(prev => [...prev, { path: data.path, name }]);
@@ -702,7 +704,7 @@ const App: React.FC = () => {
     try {
       await fetch('/api/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           feedback: annotationsOutput,
           annotations,
@@ -986,7 +988,7 @@ const App: React.FC = () => {
     try {
       const res = await fetch('/api/save-notes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(body),
       });
       const data = await res.json();

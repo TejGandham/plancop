@@ -2,6 +2,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { randomUUID } from "node:crypto";
 import { enrichPlanData } from "./enrichment.ts";
 import { getVersion, getVersions, savePlan } from "./storage-versions.ts";
 import {
@@ -32,11 +33,15 @@ type ReviewState = {
   decisionPromise: Promise<Decision>;
 };
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-} as const;
+function makeCorsHeaders(origin: string) {
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+  };
+}
+
+let CORS_HEADERS = makeCorsHeaders("http://127.0.0.1");
 
 function writeJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, {
@@ -133,7 +138,7 @@ function loadHtml(): string {
   try {
     return readFileSync(htmlPath, "utf8");
   } catch {
-    return "<!doctype html><html><body><h1>plancop ui not built</h1></body></html>";
+    return "<!doctype html><html><head></head><body><h1>plancop ui not built</h1></body></html>";
   }
 }
 
@@ -170,7 +175,12 @@ async function main(): Promise<void> {
   const sessionMode = process.env.PLANCOP_SESSION_MODE ?? "ephemeral";
   const persistentMode = sessionMode !== "ephemeral";
   const initialHookInput = loadInitialHookInput(!persistentMode);
-  const html = loadHtml();
+  const rawHtml = loadHtml();
+  const sessionToken = randomUUID();
+  const html = rawHtml.replace(
+    "</head>",
+    `<script>window.__PLANCOP_TOKEN__="${sessionToken}";</script></head>`
+  );
   const sseClients: ServerResponse[] = [];
   let reviewState: ReviewState | null = initialHookInput ? createReviewState(initialHookInput) : null;
   let waitingPushResponse = false;
@@ -224,6 +234,23 @@ async function main(): Promise<void> {
     if (req.method === "GET" && pathname === "/") {
       writeHtml(res, 200, html);
       return;
+    }
+
+    // Auth middleware for all /api/* routes
+    if (pathname.startsWith("/api/")) {
+      let reqToken: string | undefined;
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        reqToken = authHeader.slice(7);
+      }
+      // EventSource cannot send headers — accept query param for /api/events
+      if (!reqToken && pathname === "/api/events") {
+        reqToken = parsedUrl.searchParams.get("token") ?? undefined;
+      }
+      if (reqToken !== sessionToken) {
+        writeJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
     }
 
     if (req.method === "GET" && pathname === "/api/status") {
@@ -368,6 +395,19 @@ async function main(): Promise<void> {
     }
     sseClients.length = 0;
 
+    const denyDecision = {
+      permissionDecision: "deny",
+      permissionDecisionReason: "Review server shutting down — plan denied for safety",
+    };
+
+    // In ephemeral mode with unsettled review, write deny decision to stdout
+    // so the hook caller gets a response even during signal shutdown.
+    if (!persistentMode && reviewState && !reviewState.settled) {
+      process.stdout.write(`${JSON.stringify(denyDecision)}\n`);
+    }
+
+    settleReview(reviewState, denyDecision);
+
     if (persistentMode) {
       removePidFile();
     }
@@ -384,29 +424,34 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => shutdown(0));
   process.on("SIGINT", () => shutdown(0));
 
-  server.listen(0, () => {
+  server.listen(0, "127.0.0.1", () => {
     const address = server.address();
     if (!address || typeof address === "string") {
       process.stderr.write("PLANCOP_PORT:0\n");
       return;
     }
 
+    CORS_HEADERS = makeCorsHeaders(`http://127.0.0.1:${address.port}`);
+
     process.stderr.write(`PLANCOP_PORT:${address.port}\n`);
+    process.stderr.write(`PLANCOP_TOKEN:${sessionToken}\n`);
 
     if (persistentMode) {
       const existing = readPidFile();
       if (existing && existing.pid !== process.pid && isServerRunning(existing)) {
         process.stderr.write("plancop server warning: another session server appears active\n");
       }
-      writePidFile({ pid: process.pid, port: address.port, startedAt: Date.now() });
+      writePidFile({ pid: process.pid, port: address.port, startedAt: Date.now(), token: sessionToken });
       resetInactivityTimer();
     }
   });
 
   if (!persistentMode) {
     const decision = await reviewState!.decisionPromise;
-    process.stdout.write(`${JSON.stringify(decision)}\n`);
-    setTimeout(() => shutdown(0), 100);
+    if (!shuttingDown) {
+      process.stdout.write(`${JSON.stringify(decision)}\n`);
+      setTimeout(() => shutdown(0), 100);
+    }
   }
 }
 

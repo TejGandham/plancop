@@ -37,7 +37,7 @@ describe("server/session.ts", () => {
   it("writePidFile writes expected JSON payload", async () => {
     const session = await loadSessionModule();
     const pidFile = join(tempHome, ".plancop", "server.pid");
-    const info = { pid: 12345, port: 54321, startedAt: 1700000000000 };
+    const info = { pid: 12345, port: 54321, startedAt: 1700000000000, token: "test-token-abc" };
 
     session.writePidFile(info);
 
@@ -45,7 +45,28 @@ describe("server/session.ts", () => {
     expect(readFileSync(pidFile, "utf8")).toBe(JSON.stringify(info));
   });
 
+  it("writePidFile sets restrictive file permissions", async () => {
+    const { statSync } = await import("node:fs");
+    const session = await loadSessionModule();
+    const pidFile = join(tempHome, ".plancop", "server.pid");
+    const info = { pid: 12345, port: 54321, startedAt: 1700000000000, token: "secret" };
+
+    session.writePidFile(info);
+
+    const mode = statSync(pidFile).mode & 0o777;
+    expect(mode).toBe(0o600);
+  });
+
   it("readPidFile returns SessionInfo for valid file", async () => {
+    const session = await loadSessionModule();
+    const info = { pid: 321, port: 8080, startedAt: 1700000001111, token: "tok-123" };
+
+    session.writePidFile(info);
+
+    expect(session.readPidFile()).toEqual(info);
+  });
+
+  it("readPidFile returns SessionInfo without token (backwards compat)", async () => {
     const session = await loadSessionModule();
     const info = { pid: 321, port: 8080, startedAt: 1700000001111 };
 

@@ -47,7 +47,7 @@ function isCreateToolArgs(value: unknown): value is CreateToolArgs {
 }
 
 function hasParseError(value: ParsedToolArgs): value is ToolArgsParseError {
-  return "error" in value;
+  return "_parseError" in value && (value as ToolArgsParseError)._parseError === true;
 }
 
 function getPlanContent(toolName: string, toolArgs: ParsedToolArgs): string {

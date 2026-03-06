@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { getObsidianSettings, getEffectiveVaultPath } from '../utils/obsidian';
+import { apiHeaders } from '../utils/auth';
 import { getBearSettings } from '../utils/bear';
 
 interface ExportModalProps {
@@ -124,7 +125,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     try {
       const res = await fetch('/api/save-notes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: apiHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(body),
       });
       const data = await res.json();

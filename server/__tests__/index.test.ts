@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 type RunningServer = {
   process: ChildProcessWithoutNullStreams;
   port: number;
+  token: string;
   homeDir: string;
   getStdout: () => string;
   getStderr: () => string;
@@ -19,7 +20,7 @@ const running: RunningServer[] = [];
 function startServer(planInput?: string, extraEnv: Record<string, string> = {}): Promise<RunningServer> {
   return new Promise((resolve, reject) => {
     const homeDir = mkdtempSync(join(tmpdir(), "plancop-index-test-home-"));
-    const child = spawn("npx", ["tsx", "server/index.ts"], {
+    const child = spawn("./node_modules/.bin/tsx", ["server/index.ts"], {
       cwd: process.cwd(),
       env: {
         ...process.env,
@@ -48,24 +49,35 @@ function startServer(planInput?: string, extraEnv: Record<string, string> = {}):
       stdout += String(chunk);
     });
 
+    let portFound = "";
+    let tokenFound = "";
+
     child.stderr.on("data", (chunk: unknown) => {
       stderr += String(chunk);
-      const match = stderr.match(/PLANCOP_PORT:(\d+)/);
-      if (match && !settled) {
+      if (!portFound) {
+        const portMatch = stderr.match(/PLANCOP_PORT:(\d+)/);
+        if (portMatch) portFound = portMatch[1];
+      }
+      if (!tokenFound) {
+        const tokenMatch = stderr.match(/PLANCOP_TOKEN:([^\s]+)/);
+        if (tokenMatch) tokenFound = tokenMatch[1];
+      }
+      if (portFound && tokenFound && !settled) {
         settled = true;
         const server: RunningServer = {
           process: child,
-          port: Number(match[1]),
+          port: Number(portFound),
+          token: tokenFound,
           homeDir,
           getStdout: () => stdout,
           getStderr: () => stderr,
           waitForExit: () =>
             new Promise((resolveExit) => {
+              // Register listener FIRST to avoid race between exit event and exitCode being set
+              child.once("exit", (code: number | null) => resolveExit(code));
               if (child.exitCode !== null) {
                 resolveExit(child.exitCode);
-                return;
               }
-              child.once("exit", (code: number | null) => resolveExit(code));
             }),
         };
         running.push(server);
@@ -115,27 +127,47 @@ afterEach(async () => {
   );
 });
 
+function authHeaders(token: string, extra?: Record<string, string>) {
+  return { "Authorization": `Bearer ${token}`, ...extra };
+}
+
 describe("server/index.ts", () => {
-  it("serves GET /", async () => {
+  it("serves GET / without auth", async () => {
     const server = await startServer();
     const response = await fetch(`http://127.0.0.1:${server.port}/`);
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
-    expect(await response.text()).toContain("<");
+    const html = await response.text();
+    expect(html).toContain("<");
+    expect(html).toContain("__PLANCOP_TOKEN__");
+  });
+
+  it("returns 401 for missing/wrong token on /api/plan", async () => {
+    const server = await startServer();
+
+    const noAuth = await fetch(`http://127.0.0.1:${server.port}/api/plan`);
+    expect(noAuth.status).toBe(401);
+
+    const wrongAuth = await fetch(`http://127.0.0.1:${server.port}/api/plan`, {
+      headers: { "Authorization": "Bearer wrong-token" },
+    });
+    expect(wrongAuth.status).toBe(401);
   });
 
   it("serves GET /api/status", async () => {
     const server = await startServer();
-    const response = await fetch(`http://127.0.0.1:${server.port}/api/status`);
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/status`, {
+      headers: authHeaders(server.token),
+    });
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ ok: true });
   });
 
-  it("serves SSE stream on GET /api/events", async () => {
+  it("serves SSE stream on GET /api/events with token query param", async () => {
     const server = await startServer(undefined, { PLANCOP_SESSION_MODE: "persistent" });
-    const response = await fetch(`http://127.0.0.1:${server.port}/api/events`);
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/events?token=${server.token}`);
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/event-stream");
@@ -153,19 +185,21 @@ describe("server/index.ts", () => {
 
     const pushPromise = fetch(`http://127.0.0.1:${server.port}/api/push-plan`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(server.token, { "Content-Type": "application/json" }),
       body: JSON.stringify(pushedInput),
     });
 
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const planResponse = await fetch(`http://127.0.0.1:${server.port}/api/plan`);
+    const planResponse = await fetch(`http://127.0.0.1:${server.port}/api/plan`, {
+      headers: authHeaders(server.token),
+    });
     const planBody = await planResponse.json();
     expect(planBody).toMatchObject({ plan: "# Next Plan", timestamp: 456 });
 
     await fetch(`http://127.0.0.1:${server.port}/api/approve`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(server.token, { "Content-Type": "application/json" }),
       body: JSON.stringify({}),
     });
 
@@ -184,7 +218,9 @@ describe("server/index.ts", () => {
       })
     );
 
-    const response = await fetch(`http://127.0.0.1:${server.port}/api/plan`);
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/plan`, {
+      headers: authHeaders(server.token),
+    });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -203,8 +239,12 @@ describe("server/index.ts", () => {
 
   it("serves GET /api/versions and GET /api/version/:id", async () => {
     const server = await startServer();
-    const versionsResponse = await fetch(`http://127.0.0.1:${server.port}/api/versions`);
-    const versionResponse = await fetch(`http://127.0.0.1:${server.port}/api/version/1`);
+    const versionsResponse = await fetch(`http://127.0.0.1:${server.port}/api/versions`, {
+      headers: authHeaders(server.token),
+    });
+    const versionResponse = await fetch(`http://127.0.0.1:${server.port}/api/version/1`, {
+      headers: authHeaders(server.token),
+    });
 
     expect(versionsResponse.status).toBe(200);
     expect(await versionsResponse.json()).toEqual({ versions: [] });
@@ -217,7 +257,7 @@ describe("server/index.ts", () => {
     const server = await startServer();
     const response = await fetch(`http://127.0.0.1:${server.port}/api/approve`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(server.token, { "Content-Type": "application/json" }),
       body: JSON.stringify({}),
     });
 
@@ -233,7 +273,7 @@ describe("server/index.ts", () => {
     const server = await startServer();
     const response = await fetch(`http://127.0.0.1:${server.port}/api/deny`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(server.token, { "Content-Type": "application/json" }),
       body: JSON.stringify({ reason: "Bad plan" }),
     });
 
@@ -254,7 +294,7 @@ describe("server/index.ts", () => {
       method: "OPTIONS",
     });
     expect(response.status).toBe(204);
-    expect(response.headers.get("access-control-allow-origin")).toBe("*");
+    expect(response.headers.get("access-control-allow-origin")).toContain("127.0.0.1");
     expect(response.headers.get("access-control-allow-methods")).toContain("GET");
   });
 
@@ -269,7 +309,7 @@ describe("server/index.ts", () => {
     const server = await startServer();
     const response = await fetch(`http://127.0.0.1:${server.port}/api/push-plan`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(server.token, { "Content-Type": "application/json" }),
       body: JSON.stringify({
         timestamp: Date.now(),
         cwd: "/tmp",
@@ -297,7 +337,7 @@ describe("server/index.ts", () => {
     // First push-plan — will block waiting for a decision
     const firstPush = fetch(`http://127.0.0.1:${server.port}/api/push-plan`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(server.token, { "Content-Type": "application/json" }),
       body: planPayload,
     });
 
@@ -309,7 +349,7 @@ describe("server/index.ts", () => {
       `http://127.0.0.1:${server.port}/api/push-plan`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders(server.token, { "Content-Type": "application/json" }),
         body: planPayload,
       }
     );
@@ -321,14 +361,33 @@ describe("server/index.ts", () => {
     // Clean up: approve the pending first push so the server can exit
     await fetch(`http://127.0.0.1:${server.port}/api/approve`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(server.token, { "Content-Type": "application/json" }),
       body: JSON.stringify({}),
     });
     await firstPush;
   });
 
+  it("settles pending review with deny on SIGTERM in ephemeral mode", async () => {
+    const server = await startServer();
+
+    // Don't approve or deny — send SIGTERM while review is pending
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    server.process.kill("SIGTERM");
+
+    const code = await server.waitForExit();
+    expect(code).toBe(0);
+
+    const stdout = server.getStdout().trim();
+    expect(stdout).toBeTruthy();
+    const decision = JSON.parse(stdout);
+    expect(decision).toEqual({
+      permissionDecision: "deny",
+      permissionDecisionReason: "Review server shutting down — plan denied for safety",
+    });
+  }, 15_000);
+
   it("exits with code 1 when PLAN_INPUT is invalid JSON", async () => {
-    const child = spawn("npx", ["tsx", "server/index.ts"], {
+    const child = spawn("./node_modules/.bin/tsx", ["server/index.ts"], {
       cwd: process.cwd(),
       env: {
         ...process.env,

@@ -1,3 +1,8 @@
+/**
+ * NOTE: This module is tested but NOT used at runtime by server/index.ts.
+ * Runtime interception logic lives in scripts/plan-review.sh.
+ * TODO: Consolidate — make server consume this module instead of duplicating logic in shell.
+ */
 export type PlancopMode = "off" | "auto" | "always" | "aggressive";
 
 const VALID_MODES: ReadonlySet<string> = new Set([

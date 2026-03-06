@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { TaterSpritePullup } from './TaterSpritePullup';
 import { getIdentity, regenerateIdentity } from '../utils/identity';
+import { apiHeaders } from '../utils/auth';
 import {
   getObsidianSettings,
   saveObsidianSettings,
@@ -110,7 +111,7 @@ export const Settings: React.FC<SettingsProps> = ({ taterMode, onTaterModeChange
   useEffect(() => {
     if (obsidian.enabled && detectedVaults.length === 0 && !vaultsLoading) {
       setVaultsLoading(true);
-      fetch('/api/obsidian/vaults')
+      fetch('/api/obsidian/vaults', { headers: apiHeaders() })
         .then(res => res.json())
         .then((data: { vaults: string[] }) => {
           setDetectedVaults(data.vaults || []);

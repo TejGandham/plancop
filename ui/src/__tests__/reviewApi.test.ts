@@ -22,16 +22,19 @@ function makeAnnotation(overrides: Partial<Annotation> = {}): Annotation {
 }
 
 describe('review API wiring', () => {
-  it('approve sends POST /api/approve', async () => {
+  it('approve sends POST /api/approve with auth header', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
 
     await postApproveDecision(fetchMock as unknown as typeof fetch);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith('/api/approve', { method: 'POST' });
+    const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/approve');
+    expect(opts.method).toBe('POST');
+    expect((opts.headers as Record<string, string>)['Authorization']).toMatch(/^Bearer /);
   });
 
-  it('deny sends POST /api/deny with formatted feedback reason', async () => {
+  it('deny sends POST /api/deny with formatted feedback reason and auth header', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     const annotations: Annotation[] = [
       makeAnnotation({
@@ -50,7 +53,9 @@ describe('review API wiring', () => {
     const [url, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/deny');
     expect(requestInit.method).toBe('POST');
-    expect(requestInit.headers).toEqual({ 'Content-Type': 'application/json' });
+    const headers = requestInit.headers as Record<string, string>;
+    expect(headers['Content-Type']).toBe('application/json');
+    expect(headers['Authorization']).toMatch(/^Bearer /);
     expect(JSON.parse(String(requestInit.body))).toEqual({ reason: expectedReason });
   });
 });

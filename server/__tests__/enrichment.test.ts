@@ -83,9 +83,25 @@ describe("enrichPlanData", () => {
       toolArgs: "{not-json",
     });
 
-    expect(result.toolArgs).toEqual({ error: "Invalid toolArgs JSON" });
+    expect(result.toolArgs).toEqual({ _parseError: true, error: "Invalid toolArgs JSON" });
     expect(result.plan).toBe("");
     expect(result.toolName).toBe("edit");
+  });
+
+  it("enriches tool args that contain an 'error' field without treating it as parse error", () => {
+    const result = enrichment.enrichPlanData({
+      timestamp: 444,
+      cwd: "/tmp/project",
+      toolName: "create",
+      toolArgs: '{"file":"src/err.ts","content":"handle error","error":"not a parse error"}',
+    });
+
+    expect(result.toolArgs).toMatchObject({
+      file: "src/err.ts",
+      content: "handle error",
+      language: "typescript",
+    });
+    expect(result.plan).toBe("handle error");
   });
 });
 
