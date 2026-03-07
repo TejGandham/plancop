@@ -11,7 +11,6 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { savePlan, getVersions, getVersion } from "./storage-versions.ts";
 
 // --- Types ---
 
@@ -55,17 +54,18 @@ if (!plan) {
 // --- Load UI HTML ---
 
 const htmlPath = resolve(import.meta.dirname, "../ui/dist/index.html");
-let html = "<!doctype html><html><body><h1>plancop ui not built</h1><p>Run: cd ui && bun run build</p></body></html>";
+let rawHtml = "<!doctype html><html><body><h1>plancop ui not built</h1><p>Run: cd ui && bun run build</p></body></html>";
 if (existsSync(htmlPath)) {
   try {
-    html = readFileSync(htmlPath, "utf8");
+    rawHtml = readFileSync(htmlPath, "utf8");
   } catch {}
 }
 
-// --- Save to version history ---
+// --- Session token ---
 
-const cwd = process.cwd();
-savePlan(cwd, plan);
+const sessionToken = crypto.randomUUID();
+const html = rawHtml.replace('</head>', `<script>window.__PLANCOP_TOKEN__="${sessionToken}";</script></head>`);
+
 
 // --- Decision promise ---
 
@@ -84,6 +84,15 @@ const server = Bun.serve({
   async fetch(req) {
     const url = new URL(req.url);
 
+    // Auth: require session token for all /api/* routes
+    if (url.pathname.startsWith("/api/")) {
+      const authHeader = req.headers.get("authorization");
+      const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+      if (token !== sessionToken) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      }
+    }
+
     // Serve UI
     if (req.method === "GET" && url.pathname === "/") {
       return new Response(html, {
@@ -97,27 +106,9 @@ const server = Bun.serve({
         plan,
         origin: "claude-code",
         permissionMode,
-        sharingEnabled: true,
       });
     }
 
-    // API: status
-    if (req.method === "GET" && url.pathname === "/api/status") {
-      return Response.json({ ok: true });
-    }
-
-    // API: version history
-    if (req.method === "GET" && url.pathname === "/api/versions") {
-      const versions = getVersions(cwd, plan);
-      return Response.json({ versions });
-    }
-
-    // API: single version
-    if (req.method === "GET" && /^\/api\/version\/[^/]+$/.test(url.pathname)) {
-      const versionId = Number(url.pathname.split("/").pop());
-      const version = Number.isInteger(versionId) ? getVersion(cwd, plan, versionId) : null;
-      return Response.json({ version });
-    }
 
     // API: approve
     if (req.method === "POST" && url.pathname === "/api/approve") {
@@ -160,16 +151,33 @@ const server = Bun.serve({
 
 const url = `http://localhost:${server.port}`;
 console.error(`plancop: Review UI at ${url}`);
+console.error(`PLANCOP_TOKEN:${sessionToken}`);
 
 const openCommand = process.platform === "darwin" ? "open" : "xdg-open";
 Bun.spawn([openCommand, url], { stdio: ["ignore", "ignore", "ignore"] });
 
 // --- Wait for decision ---
 
+// --- Signal handlers ---
+
+let shuttingDown = false;
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  if (!settled) {
+    settled = true;
+    resolveDecision({ approved: false, feedback: "Review server shutting down \u2014 plan denied for safety" });
+  }
+}
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
+
 const result = await decisionPromise;
 
-// Give browser time to receive response and update UI
-await Bun.sleep(1500);
+// Give browser time to receive response and update UI (skip on signal shutdown)
+if (!shuttingDown) {
+  await Bun.sleep(1500);
+}
 
 server.stop();
 

@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 type RunningServer = {
   process: ChildProcessWithoutNullStreams;
   port: number;
+  token: string;
   homeDir: string;
   getStdout: () => string;
   getStderr: () => string;
@@ -47,13 +48,14 @@ function startServer(planContent?: string): Promise<RunningServer> {
 
     child.stderr.on("data", (chunk: unknown) => {
       stderr += String(chunk);
-      // Server prints "plancop: Review UI at http://localhost:PORT"
-      const match = stderr.match(/http:\/\/localhost:(\d+)/);
-      if (match && !settled) {
+      const portMatch = stderr.match(/http:\/\/localhost:(\d+)/);
+      const tokenMatch = stderr.match(/PLANCOP_TOKEN:([^\s]+)/);
+      if (portMatch && tokenMatch && !settled) {
         settled = true;
         const server: RunningServer = {
           process: child,
-          port: Number(match[1]),
+          port: Number(portMatch[1]),
+          token: tokenMatch[1],
           homeDir,
           getStdout: () => stdout,
           getStderr: () => stderr,
@@ -114,26 +116,34 @@ afterEach(async () => {
 });
 
 describe("server/index.ts (ExitPlanMode)", () => {
-  it("serves GET /", async () => {
+  it("serves GET / without auth and injects token", async () => {
     const server = await startServer();
     const response = await fetch(`http://127.0.0.1:${server.port}/`);
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
-    expect(await response.text()).toContain("<");
+    const html = await response.text();
+    expect(html).toContain("<");
+    expect(html).toContain("__PLANCOP_TOKEN__");
   });
 
-  it("serves GET /api/status", async () => {
+  it("returns 401 for missing or wrong token on /api/* routes", async () => {
     const server = await startServer();
-    const response = await fetch(`http://127.0.0.1:${server.port}/api/status`);
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ ok: true });
+    const noAuth = await fetch(`http://127.0.0.1:${server.port}/api/plan`);
+    expect(noAuth.status).toBe(401);
+
+    const wrongAuth = await fetch(`http://127.0.0.1:${server.port}/api/plan`, {
+      headers: { "Authorization": "Bearer wrong-token" },
+    });
+    expect(wrongAuth.status).toBe(401);
   });
 
   it("serves GET /api/plan with ExitPlanMode data", async () => {
     const server = await startServer("# My Plan\n\nDo the thing");
-    const response = await fetch(`http://127.0.0.1:${server.port}/api/plan`);
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/plan`, {
+      headers: { "Authorization": `Bearer ${server.token}` },
+    });
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -141,7 +151,6 @@ describe("server/index.ts (ExitPlanMode)", () => {
       plan: "# My Plan\n\nDo the thing",
       origin: "claude-code",
       permissionMode: "default",
-      sharingEnabled: true,
     });
   });
 
@@ -149,6 +158,7 @@ describe("server/index.ts (ExitPlanMode)", () => {
     const server = await startServer();
     const response = await fetch(`http://127.0.0.1:${server.port}/api/approve`, {
       method: "POST",
+      headers: { "Authorization": `Bearer ${server.token}` },
     });
 
     expect(response.status).toBe(200);
@@ -170,7 +180,7 @@ describe("server/index.ts (ExitPlanMode)", () => {
     const server = await startServer();
     const response = await fetch(`http://127.0.0.1:${server.port}/api/deny`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Authorization": `Bearer ${server.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ reason: "Needs changes" }),
     });
 
@@ -193,7 +203,7 @@ describe("server/index.ts (ExitPlanMode)", () => {
     const server = await startServer();
     const response = await fetch(`http://127.0.0.1:${server.port}/api/feedback`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Authorization": `Bearer ${server.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ feedback: "Fix the auth section" }),
     });
 
@@ -215,6 +225,30 @@ describe("server/index.ts (ExitPlanMode)", () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "Not found" });
   });
+
+  it("settles pending review with deny on SIGTERM", async () => {
+    const server = await startServer();
+
+    // Don't approve or deny — send SIGTERM while review is pending
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    server.process.kill("SIGTERM");
+
+    const code = await server.waitForExit();
+    expect(code).toBe(0);
+
+    const stdout = server.getStdout().trim();
+    expect(stdout).toBeTruthy();
+    const output = JSON.parse(stdout);
+    expect(output).toEqual({
+      hookSpecificOutput: {
+        hookEventName: "PermissionRequest",
+        decision: {
+          behavior: "deny",
+          message: "Review server shutting down \u2014 plan denied for safety",
+        },
+      },
+    });
+  }, 15_000);
 
   it("exits with code 1 when stdin has invalid JSON", async () => {
     const child = spawn("bun", ["run", "server/index.ts"], {

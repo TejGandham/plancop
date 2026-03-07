@@ -18,7 +18,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[Plannotator] React error boundary caught:', error, info.componentStack);
+    console.error('[Plancop] React error boundary caught:', error, info.componentStack);
   }
 
   handleRetry = () => {
@@ -35,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="text-4xl">💥</div>
             <h1 className="text-lg font-semibold">Something went wrong</h1>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Plannotator encountered an unexpected error. This is likely a rendering bug.
+              Plancop encountered an unexpected error. This is likely a rendering bug.
             </p>
             {this.state.error && (
               <pre className="text-xs text-left bg-muted/30 border border-border rounded-lg p-3 overflow-x-auto max-h-32 text-destructive">

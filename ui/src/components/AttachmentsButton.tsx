@@ -110,7 +110,8 @@ export const AttachmentsButton: React.FC<AttachmentsButtonProps> = ({
         formData.append('file', new File([blob], 'annotated.png', { type: 'image/png' }));
       }
 
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const token = (window as Record<string, unknown>).__PLANCOP_TOKEN__ as string ?? '';
+      const res = await fetch('/api/upload', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
       const data = await res.json();
       if (data.path) {
         // If re-editing, remove old path first

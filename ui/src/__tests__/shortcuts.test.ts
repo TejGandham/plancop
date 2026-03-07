@@ -28,8 +28,6 @@ describe('Keyboard Shortcuts', () => {
         if (!config.shiftKey && e.shiftKey) return;
       } else if (config.key === 'Escape') {
         if (e.key !== 'Escape') return;
-      } else if (config.key === 's') {
-        if (e.key !== 's' || !(e.metaKey || e.ctrlKey)) return;
       }
 
       // Don't intercept if typing in an input/textarea
@@ -253,88 +251,6 @@ describe('Keyboard Shortcuts', () => {
     });
   });
 
-  describe('Cmd/Ctrl+S (Save to Notes)', () => {
-    it('should prevent default when Cmd+S is pressed', () => {
-      const handler = createKeyboardHandler({ key: 's' });
-      const event = new KeyboardEvent('keydown', {
-        key: 's',
-        metaKey: true,
-        bubbles: true,
-      });
-
-      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
-      handler(event);
-
-      expect(preventDefaultSpy).toHaveBeenCalled();
-    });
-
-    it('should prevent default when Ctrl+S is pressed', () => {
-      const handler = createKeyboardHandler({ key: 's' });
-      const event = new KeyboardEvent('keydown', {
-        key: 's',
-        ctrlKey: true,
-        bubbles: true,
-      });
-
-      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
-      handler(event);
-
-      expect(preventDefaultSpy).toHaveBeenCalled();
-    });
-
-    it('should not trigger if typing in input field', () => {
-      const handler = createKeyboardHandler({ key: 's' });
-      const input = document.createElement('input');
-      document.body.appendChild(input);
-
-      const event = new KeyboardEvent('keydown', {
-        key: 's',
-        metaKey: true,
-        bubbles: true,
-      });
-
-      Object.defineProperty(event, 'target', { value: input, enumerable: true });
-
-      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
-      handler(event);
-
-      expect(preventDefaultSpy).not.toHaveBeenCalled();
-      document.body.removeChild(input);
-    });
-
-    it('should not trigger if typing in textarea', () => {
-      const handler = createKeyboardHandler({ key: 's' });
-      const textarea = document.createElement('textarea');
-      document.body.appendChild(textarea);
-
-      const event = new KeyboardEvent('keydown', {
-        key: 's',
-        metaKey: true,
-        bubbles: true,
-      });
-
-      Object.defineProperty(event, 'target', { value: textarea, enumerable: true });
-
-      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
-      handler(event);
-
-      expect(preventDefaultSpy).not.toHaveBeenCalled();
-      document.body.removeChild(textarea);
-    });
-
-    it('should not trigger if neither metaKey nor ctrlKey is pressed', () => {
-      const handler = createKeyboardHandler({ key: 's' });
-      const event = new KeyboardEvent('keydown', {
-        key: 's',
-        bubbles: true,
-      });
-
-      const preventDefaultSpy = vi.spyOn(event, 'preventDefault');
-      handler(event);
-
-      expect(preventDefaultSpy).not.toHaveBeenCalled();
-    });
-  });
 
   describe('Keyboard Event Handler Logic', () => {
     it('should correctly identify Cmd+Enter vs Cmd+Shift+Enter', () => {
@@ -364,20 +280,5 @@ describe('Keyboard Shortcuts', () => {
       expect(denySpy).toHaveBeenCalled();
     });
 
-    it('should handle case-insensitive key matching for s key', () => {
-      const handler = createKeyboardHandler({ key: 's' });
-
-      // Test lowercase 's'
-      const lowerEvent = new KeyboardEvent('keydown', {
-        key: 's',
-        metaKey: true,
-        bubbles: true,
-      });
-
-      const lowerSpy = vi.spyOn(lowerEvent, 'preventDefault');
-      handler(lowerEvent);
-
-      expect(lowerSpy).toHaveBeenCalled();
-    });
   });
 });

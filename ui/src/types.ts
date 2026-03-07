@@ -22,7 +22,7 @@ export interface Annotation {
   text?: string; // For comments
   originalText: string; // The text that was selected
   createdA: number;
-  author?: string; // Tater identity for collaborative sharing
+  author?: string; // Annotation author
   images?: ImageAttachment[]; // Attached images with human-readable names
   // web-highlighter metadata for cross-element selections
   startMeta?: {
@@ -48,40 +48,3 @@ export interface Block {
   startLine: number; // 1-based line number in source
 }
 
-export interface DiffResult {
-  original: string;
-  modified: string;
-  diffText: string;
-}
-
-// Code Review Types
-export type CodeAnnotationType = 'comment' | 'suggestion' | 'concern';
-
-export interface CodeAnnotation {
-  id: string;
-  type: CodeAnnotationType;
-  filePath: string;
-  lineStart: number;
-  lineEnd: number;
-  side: 'old' | 'new'; // Maps to 'deletions' | 'additions' in @pierre/diffs
-  text?: string;
-  suggestedCode?: string;
-  createdAt: number;
-  author?: string;
-}
-
-// For @pierre/diffs integration
-export interface DiffAnnotationMetadata {
-  annotationId: string;
-  type: CodeAnnotationType;
-  text?: string;
-  suggestedCode?: string;
-  author?: string;
-}
-
-export interface SelectedLineRange {
-  start: number;
-  end: number;
-  side: 'deletions' | 'additions';
-  endSide?: 'deletions' | 'additions';
-}

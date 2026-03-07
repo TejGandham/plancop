@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Annotation, AnnotationType, Block } from '../types';
-import { isCurrentUser } from '../utils/identity';
 import { ImageThumbnail } from './ImageThumbnail';
 
 interface PanelProps {
@@ -11,8 +10,6 @@ interface PanelProps {
   onDelete: (id: string) => void;
   onEdit?: (id: string, updates: Partial<Annotation>) => void;
   selectedId: string | null;
-  shareUrl?: string;
-  sharingEnabled?: boolean;
   width?: number;
 }
 
@@ -24,23 +21,10 @@ export const AnnotationPanel: React.FC<PanelProps> = ({
   onDelete,
   onEdit,
   selectedId,
-  shareUrl,
-  sharingEnabled = true,
   width,
 }) => {
-  const [copied, setCopied] = useState(false);
   const sortedAnnotations = [...annotations].sort((a, b) => a.createdA - b.createdA);
 
-  const handleQuickShare = async () => {
-    if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (e) {
-      console.error('Failed to copy:', e);
-    }
-  };
 
   if (!isOpen) return null;
 
@@ -85,31 +69,6 @@ export const AnnotationPanel: React.FC<PanelProps> = ({
         )}
       </div>
 
-      {/* Quick Share Footer */}
-      {sharingEnabled && shareUrl && annotations.length > 0 && (
-        <div className="p-2 border-t border-border/50">
-          <button
-            onClick={handleQuickShare}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-muted/50"
-          >
-            {copied ? (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-                Copied
-              </>
-            ) : (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                </svg>
-                Quick Share
-              </>
-            )}
-          </button>
-        </div>
-      )}
     </aside>
   );
 };
@@ -261,11 +220,11 @@ const AnnotationCard: React.FC<{
     >
       {/* Author */}
       {annotation.author && (
-        <div className={`flex items-center gap-1.5 text-[10px] font-mono truncate mb-1.5 ${isCurrentUser(annotation.author) ? 'text-muted-foreground/60' : 'text-muted-foreground'}`}>
+        <div className={`flex items-center gap-1.5 text-[10px] font-mono truncate mb-1.5 ${true ? 'text-muted-foreground/60' : 'text-muted-foreground'}`}>
           <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
-          <span className="truncate">{annotation.author}{isCurrentUser(annotation.author) && ' (me)'}</span>
+          <span className="truncate">{annotation.author}{true && ' (me)'}</span>
         </div>
       )}
 

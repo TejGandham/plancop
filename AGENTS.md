@@ -14,17 +14,16 @@ Visual plan review plugin for **Claude Code**. Intercepts the `ExitPlanMode` eve
 plancop/
 ├── server/                      # Bun HTTP hook server [→ server/AGENTS.md]
 │   ├── index.ts                 # ExitPlanMode server (Bun.serve, ~170 LOC)
-│   ├── storage-versions.ts      # Plan versioning in ~/.plancop/history/
 │   ├── package.json             # { "type": "module" } — ESM marker
 │   └── __tests__/               # Child-process spawn + storage tests
 ├── mcp/                         # MCP stdio server (JSON-RPC 2.0)
 │   ├── server.js                # Single tool: submit_plan
 │   └── __tests__/               # JSON-RPC protocol tests
 ├── ui/                          # React UI — Vite single-file build [→ ui/AGENTS.md]
-│   ├── src/App.tsx              # Main component (~1600 LOC, 25+ useState)
-│   ├── src/components/          # ~28 components (Viewer, AnnotationPanel, plan-diff, etc.)
-│   ├── src/hooks/               # 10 custom hooks (sharing, agents, planDiff, etc.)
-│   ├── src/utils/               # 16 utilities (parser, storage, feedback, etc.)
+│   ├── src/App.tsx              # Main component (~861 LOC)
+│   ├── src/components/          # ~20 components (Viewer, AnnotationPanel, ImageAnnotator, etc.)
+│   ├── src/hooks/               # 5 custom hooks (sidebar, activeSection, resizablePanel, etc.)
+│   ├── src/utils/               # 6 utilities (parser, storage, feedback, etc.)
 │   └── vite.config.ts           # Single-file build (all JS/CSS inlined into HTML)
 ├── src/types/                   # Shared types (hook.ts, plan.ts, annotation.ts)
 ├── test/fixtures/               # Test data
@@ -43,7 +42,6 @@ plancop/
 | Add MCP tool | `mcp/server.js` handleToolsList + handleToolsCall | Follow submit_plan pattern |
 | Add UI component | `ui/src/components/` | State lives in App.tsx, pass via props |
 | Add custom hook | `ui/src/hooks/` | Return object, no side effects in hook body |
-| Modify plan storage | `server/storage-versions.ts` | Plans saved at ~/.plancop/history/ |
 | Change hook I/O shape | `src/types/hook.ts` + `server/index.ts` | ExitPlanMode in, PermissionRequest out |
 | Add server test | `server/__tests__/index.test.ts` | Child-process tests with stdin piping |
 | Add MCP test | `mcp/__tests__/server.test.ts` | JSON-RPC via stdin, parse port from stderr |
@@ -113,9 +111,6 @@ Server prints `plancop: Review UI at http://localhost:PORT` to stderr. Tests par
 ### UI must be built first
 `server/index.ts` reads `ui/dist/index.html`. If missing, returns 500. Always `npm run build` before running the server.
 
-### Hardcoded home directory
-Plan history stored at `~/.plancop/history/`. Tests mock `HOME` env var. Breaks if homedir is unexpected (Docker, CI).
-
 ### Server tests use Node environment
 `server/__tests__/index.test.ts` uses `// @vitest-environment node` to bypass happy-dom's CORS enforcement on cross-origin fetch. Do not remove this directive.
 
@@ -125,9 +120,9 @@ Only these files have enforced coverage thresholds (via `vitest.config.ts`):
 
 | Module | Files |
 |--------|-------|
-| server/ | storage-versions.ts |
+| server/ | index.ts (child-process tested) |
 | src/types/ | hook.ts |
-| ui/src/utils/ | feedback.ts, parser.ts, annotationHelpers.ts, planDiffEngine.ts |
+| ui/src/utils/ | feedback.ts, parser.ts, annotationHelpers.ts |
 
 `server/index.ts` and `mcp/server.js` are tested via child-process spawning — V8 coverage can't instrument them.
 
@@ -150,4 +145,3 @@ Both: checkout → setup-node 22 → npm ci → cd ui && npm ci → npm run buil
 | `mcp/server.js` | Independent from server/index.ts, 10-min timeout |
 | `src/types/hook.ts` | ExitPlanMode input type guard + PermissionRequest output |
 | `ui/src/utils/storage.ts` | Cookies, not localStorage |
-| `server/storage-versions.ts` | Hardcoded ~/.plancop path |

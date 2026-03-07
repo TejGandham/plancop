@@ -22,7 +22,7 @@ interface ThemeProviderProps {
 export function ThemeProvider({
   children,
   defaultTheme = 'dark',
-  storageKey = 'plannotator-theme',
+  storageKey = 'plancop-theme',
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(
     () => (storage.getItem(storageKey) as Theme) || defaultTheme

@@ -1,8 +1,8 @@
 import { storage } from './storage';
 
-const STORAGE_KEY_TOC = 'plannotator-toc-enabled';
-const STORAGE_KEY_STICKY_ACTIONS = 'plannotator-sticky-actions-enabled';
-const STORAGE_KEY_UI_FEATURES_CONFIGURED = 'plannotator-ui-features-configured';
+const STORAGE_KEY_TOC = 'plancop-toc-enabled';
+const STORAGE_KEY_STICKY_ACTIONS = 'plancop-sticky-actions-enabled';
+const STORAGE_KEY_UI_FEATURES_CONFIGURED = 'plancop-ui-features-configured';
 
 export interface UIPreferences {
   tocEnabled: boolean;

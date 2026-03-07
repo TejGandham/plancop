@@ -1,18 +1,46 @@
-# Plancop (alpha)
+# Plancop
 
-Visual plan review for **Claude Code**. Annotate and review AI agent plans, approve or deny before they execute, and send structured feedback back to the agent — all from a browser UI.
+> **Alpha software** — APIs, hook format, and UI may change between releases. Pin to a specific commit if stability matters.
 
-Inspired by [Plannotator](https://github.com/backnotprop/plannotator), Plancop brings visual plan review to Claude Code via the `ExitPlanMode` hook.
+Visual plan review for **Claude Code**. Intercept agent plans before they execute, annotate them in a browser UI, and approve or deny with structured feedback.
+
+## TL;DR
+
+```bash
+# 1. Install
+git clone https://github.com/TejGandham/plancop.git ~/tools/plancop
+cd ~/tools/plancop && npm install && cd ui && npm install && cd .. && npm run build
+
+# 2. Add hook to your project
+mkdir -p .github/hooks
+cat > .github/hooks/plancop.json << 'EOF'
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run ~/tools/plancop/server/index.ts",
+            "timeout": 345600
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+
+# 3. Use Claude Code as usual — plancop opens when the agent presents a plan
+```
 
 ## Features
 
 | Feature | Description |
 |---------|-------------|
 | **Visual Plan Review** | Approve or deny agent plans with inline annotations |
-| **Plan Diff** | See what changed when the agent revises a plan |
 | **Annotations** | Delete, insert, replace, or comment on specific lines |
-| **Sharing** | Share annotated plans via compressed URL — no backend, nothing stored |
-| **Export** | Save annotations to Obsidian, Bear, or download |
 | **Dark Mode** | System-aware theme switching |
 
 ## How It Works
@@ -86,7 +114,6 @@ Start a Claude Code session. When the agent exits plan mode, plancop intercepts 
 | `Cmd/Ctrl+Enter` | Approve (no annotations) or send feedback (with annotations) |
 | `Cmd/Ctrl+Shift+Enter` | Send feedback / deny |
 | `Escape` | Close modal or cancel annotation |
-| `Cmd/Ctrl+S` | Save to notes app (Obsidian, Bear, or download) |
 
 ## MCP Setup
 

@@ -7,7 +7,7 @@
 
 import { useState, useCallback } from "react";
 
-export type SidebarTab = "toc" | "versions";
+export type SidebarTab = "toc";
 
 export interface UseSidebarReturn {
   isOpen: boolean;

@@ -5,11 +5,8 @@ import 'highlight.js/styles/github-dark.css';
 import { Block, Annotation, AnnotationType, EditorMode, type ImageAttachment } from '../types';
 import { Frontmatter } from '../utils/parser';
 import { AnnotationToolbar } from './AnnotationToolbar';
-import { TaterSpriteSitting } from './TaterSpriteSitting';
 import { AttachmentsButton } from './AttachmentsButton';
 import { MermaidBlock } from './MermaidBlock';
-import { getIdentity } from '../utils/identity';
-import { PlanDiffBadge } from './plan-diff/PlanDiffBadge';
 
 interface ViewerProps {
   blocks: Block[];
@@ -20,25 +17,16 @@ interface ViewerProps {
   onSelectAnnotation: (id: string | null) => void;
   selectedAnnotationId: string | null;
   mode: EditorMode;
-  taterMode: boolean;
   globalAttachments?: ImageAttachment[];
   onAddGlobalAttachment?: (image: ImageAttachment) => void;
   onRemoveGlobalAttachment?: (path: string) => void;
   repoInfo?: { display: string; branch?: string } | null;
   stickyActions?: boolean;
-  onOpenLinkedDoc?: (path: string) => void;
-  linkedDocInfo?: { filepath: string; onBack: () => void } | null;
-  // Plan diff props
-  planDiffStats?: { additions: number; deletions: number; modifications: number } | null;
-  isPlanDiffActive?: boolean;
-  onPlanDiffToggle?: () => void;
-  hasPreviousVersion?: boolean;
 }
 
 export interface ViewerHandle {
   removeHighlight: (id: string) => void;
   clearAllHighlights: () => void;
-  applySharedAnnotations: (annotations: Annotation[]) => void;
 }
 
 /**
@@ -83,18 +71,11 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
   onSelectAnnotation,
   selectedAnnotationId,
   mode,
-  taterMode,
   globalAttachments = [],
   onAddGlobalAttachment,
   onRemoveGlobalAttachment,
   repoInfo,
   stickyActions = true,
-  planDiffStats,
-  isPlanDiffActive,
-  onPlanDiffToggle,
-  hasPreviousVersion,
-  onOpenLinkedDoc,
-  linkedDocInfo,
 }, ref) => {
   const [copied, setCopied] = useState(false);
   const [showGlobalCommentInput, setShowGlobalCommentInput] = useState(false);
@@ -123,7 +104,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
       text: globalCommentValue.trim(),
       originalText: '',
       createdA: Date.now(),
-      author: getIdentity(),
+      author: 'reviewer',
     };
 
     onAddAnnotation(newAnnotation);
@@ -237,7 +218,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
       text,
       originalText: source.text,
       createdA: Date.now(),
-      author: getIdentity(),
+      author: 'reviewer',
       startMeta: source.startMeta,
       endMeta: source.endMeta,
       images,
@@ -252,76 +233,6 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
     onAddAnnotationRef.current(newAnnotation);
   };
 
-  // Helper to find text in DOM and create a range
-  const findTextInDOM = useCallback((searchText: string): Range | null => {
-    if (!containerRef.current) return null;
-
-    const walker = document.createTreeWalker(
-      containerRef.current,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
-
-    let node: Text | null;
-    while ((node = walker.nextNode() as Text | null)) {
-      const text = node.textContent || '';
-      const index = text.indexOf(searchText);
-      if (index !== -1) {
-        const range = document.createRange();
-        range.setStart(node, index);
-        range.setEnd(node, index + searchText.length);
-        return range;
-      }
-    }
-
-    // Try across multiple text nodes for multi-line content
-    const fullText = containerRef.current.textContent || '';
-    const searchIndex = fullText.indexOf(searchText);
-    if (searchIndex === -1) return null;
-
-    // Use Selection API to find and select the text
-    const selection = window.getSelection();
-    if (!selection) return null;
-
-    // Reset walker
-    const walker2 = document.createTreeWalker(
-      containerRef.current,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
-
-    let charCount = 0;
-    let startNode: Text | null = null;
-    let startOffset = 0;
-    let endNode: Text | null = null;
-    let endOffset = 0;
-
-    while ((node = walker2.nextNode() as Text | null)) {
-      const nodeLength = node.textContent?.length || 0;
-
-      if (!startNode && charCount + nodeLength > searchIndex) {
-        startNode = node;
-        startOffset = searchIndex - charCount;
-      }
-
-      if (startNode && charCount + nodeLength >= searchIndex + searchText.length) {
-        endNode = node;
-        endOffset = searchIndex + searchText.length - charCount;
-        break;
-      }
-
-      charCount += nodeLength;
-    }
-
-    if (startNode && endNode) {
-      const range = document.createRange();
-      range.setStart(startNode, startOffset);
-      range.setEnd(endNode, endOffset);
-      return range;
-    }
-
-    return null;
-  }, []);
 
   useImperativeHandle(ref, () => ({
     removeHighlight: (id: string) => {
@@ -376,115 +287,8 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
         }
         el.remove();
       });
-    },
-
-    applySharedAnnotations: (sharedAnnotations: Annotation[]) => {
-      const highlighter = highlighterRef.current;
-      if (!highlighter || !containerRef.current) return;
-
-      sharedAnnotations.forEach(ann => {
-        // Skip if already highlighted
-        const existingDoms = highlighter.getDoms(ann.id);
-        if (existingDoms && existingDoms.length > 0) return;
-
-        // Also skip if manually highlighted
-        const existingManual = containerRef.current?.querySelector(`[data-bind-id="${ann.id}"]`);
-        if (existingManual) return;
-
-        // Find the text in the DOM
-        const range = findTextInDOM(ann.originalText);
-        if (!range) {
-          console.warn(`Could not find text for annotation ${ann.id}: "${ann.originalText.slice(0, 50)}..."`);
-          return;
-        }
-
-        try {
-          // Multi-mark approach: wrap each text node portion separately
-          // This avoids destructive extractContents() that breaks DOM structure
-          const textNodes: { node: Text; start: number; end: number }[] = [];
-
-          // Collect all text nodes within the range
-          const walker = document.createTreeWalker(
-            range.commonAncestorContainer.nodeType === Node.TEXT_NODE
-              ? range.commonAncestorContainer.parentNode!
-              : range.commonAncestorContainer,
-            NodeFilter.SHOW_TEXT,
-            null
-          );
-
-          let node: Text | null;
-          let inRange = false;
-
-          while ((node = walker.nextNode() as Text | null)) {
-            // Check if this node is the start container
-            if (node === range.startContainer) {
-              inRange = true;
-              const start = range.startOffset;
-              const end = node === range.endContainer ? range.endOffset : node.length;
-              if (end > start) {
-                textNodes.push({ node, start, end });
-              }
-              if (node === range.endContainer) break;
-              continue;
-            }
-
-            // Check if this node is the end container
-            if (node === range.endContainer) {
-              if (inRange) {
-                const end = range.endOffset;
-                if (end > 0) {
-                  textNodes.push({ node, start: 0, end });
-                }
-              }
-              break;
-            }
-
-            // Node is fully within range
-            if (inRange && node.length > 0) {
-              textNodes.push({ node, start: 0, end: node.length });
-            }
-          }
-
-          // If we only have one text node and it's fully contained, use simple approach
-          if (textNodes.length === 0) {
-            console.warn(`No text nodes found for annotation ${ann.id}`);
-            return;
-          }
-
-          // Wrap each text node portion with its own mark (process in reverse to avoid offset issues)
-          textNodes.reverse().forEach(({ node, start, end }) => {
-            try {
-              const nodeRange = document.createRange();
-              nodeRange.setStart(node, start);
-              nodeRange.setEnd(node, end);
-
-              const mark = document.createElement('mark');
-              mark.className = 'annotation-highlight';
-              mark.dataset.bindId = ann.id;
-
-              if (ann.type === AnnotationType.DELETION) {
-                mark.classList.add('deletion');
-              } else if (ann.type === AnnotationType.COMMENT) {
-                mark.classList.add('comment');
-              }
-
-              // surroundContents works reliably for single text node ranges
-              nodeRange.surroundContents(mark);
-
-              // Make it clickable
-              mark.addEventListener('click', () => {
-                onSelectAnnotation(ann.id);
-              });
-            } catch (e) {
-              console.warn(`Failed to wrap text node for annotation ${ann.id}:`, e);
-            }
-          });
-        } catch (e) {
-          console.warn(`Failed to apply highlight for annotation ${ann.id}:`, e);
-        }
-      });
     }
-  }), [findTextInDOM, onSelectAnnotation]);
+  }), [onSelectAnnotation]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -622,7 +426,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
       text,
       originalText: codeText,
       createdA: Date.now(),
-      author: getIdentity(),
+      author: 'reviewer',
       images,
     };
 
@@ -641,61 +445,26 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
 
   return (
     <div className="relative z-50 w-full max-w-[832px] 2xl:max-w-5xl">
-      {taterMode && <TaterSpriteSitting />}
       <article
         ref={containerRef}
-        className={`w-full max-w-[832px] 2xl:max-w-5xl bg-card rounded-xl shadow-xl p-5 md:p-8 lg:p-10 xl:p-12 relative ${
-          linkedDocInfo ? 'border-2 border-primary' : 'border border-border/50'
-        }`}
+        className="w-full max-w-[832px] 2xl:max-w-5xl bg-card rounded-xl shadow-xl p-5 md:p-8 lg:p-10 xl:p-12 relative border border-border/50"
       >
-        {/* Repo info + plan diff badge + linked doc badge - top left */}
-        {(repoInfo || hasPreviousVersion || linkedDocInfo) && (
+        {/* Repo info - top left */}
+        {repoInfo && (
           <div className="absolute top-3 left-3 md:top-4 md:left-5 flex flex-col items-start gap-1 text-[9px] text-muted-foreground/50 font-mono">
-            {repoInfo && !linkedDocInfo && (
-              <div className="flex items-center gap-1.5">
-                <span className="px-1.5 py-0.5 bg-muted/50 rounded truncate max-w-[140px]" title={repoInfo.display}>
-                  {repoInfo.display}
-                </span>
-                {repoInfo.branch && (
-                  <span className="px-1.5 py-0.5 bg-muted/30 rounded max-w-[120px] flex items-center gap-1 overflow-hidden" title={repoInfo.branch}>
-                    <svg className="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z" />
-                    </svg>
-                    <span className="truncate">{repoInfo.branch}</span>
-                  </span>
-                )}
-              </div>
-            )}
-            {onPlanDiffToggle && !linkedDocInfo && (
-              <PlanDiffBadge
-                stats={planDiffStats ?? null}
-                isActive={isPlanDiffActive ?? false}
-                onToggle={onPlanDiffToggle}
-                hasPreviousVersion={hasPreviousVersion ?? false}
-              />
-            )}
-            {linkedDocInfo && (
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={linkedDocInfo.onBack}
-                  className="px-1.5 py-0.5 bg-primary/10 text-primary rounded hover:bg-primary/20 transition-colors flex items-center gap-1"
-                >
-                  <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            <div className="flex items-center gap-1.5">
+              <span className="px-1.5 py-0.5 bg-muted/50 rounded truncate max-w-[140px]" title={repoInfo.display}>
+                {repoInfo.display}
+              </span>
+              {repoInfo.branch && (
+                <span className="px-1.5 py-0.5 bg-muted/30 rounded max-w-[120px] flex items-center gap-1 overflow-hidden" title={repoInfo.branch}>
+                  <svg className="w-2.5 h-2.5 flex-shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z" />
                   </svg>
-                  plan
-                </button>
-                <span className="px-1.5 py-0.5 bg-primary/10 text-primary/80 rounded">
-                  Linked File
+                  <span className="truncate">{repoInfo.branch}</span>
                 </span>
-                <span
-                  className="px-1.5 py-0.5 bg-muted/50 text-muted-foreground rounded truncate max-w-[200px]"
-                  title={linkedDocInfo.filepath}
-                >
-                  {linkedDocInfo.filepath.split('/').pop()}
-                </span>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
 
@@ -782,7 +551,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
           <button
             onClick={handleCopyPlan}
             className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted rounded-md transition-colors"
-            title={copied ? 'Copied!' : linkedDocInfo ? 'Copy file' : 'Copy plan'}
+            title={copied ? 'Copied!' : 'Copy plan'}
           >
             {copied ? (
               <>
@@ -796,7 +565,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                <span className="hidden md:inline">{linkedDocInfo ? 'Copy file' : 'Copy plan'}</span>
+                <span className="hidden md:inline">Copy plan</span>
               </>
             )}
           </button>
@@ -836,7 +605,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
               isHovered={hoveredCodeBlock?.block.id === block.id}
             />
           ) : (
-            <BlockRenderer key={block.id} block={block} onOpenLinkedDoc={onOpenLinkedDoc} />
+            <BlockRenderer key={block.id} block={block} />
           )
         ))}
 
@@ -891,7 +660,7 @@ export const Viewer = forwardRef<ViewerHandle, ViewerProps>(({
 /**
  * Renders inline markdown: **bold**, *italic*, `code`, [links](url)
  */
-const InlineMarkdown: React.FC<{ text: string; onOpenLinkedDoc?: (path: string) => void }> = ({ text, onOpenLinkedDoc }) => {
+const InlineMarkdown: React.FC<{ text: string }> = ({ text }) => {
   const parts: React.ReactNode[] = [];
   let remaining = text;
   let key = 0;
@@ -934,25 +703,7 @@ const InlineMarkdown: React.FC<{ text: string; onOpenLinkedDoc?: (path: string) 
         !linkUrl.startsWith('http://') &&
         !linkUrl.startsWith('https://');
 
-      if (isLocalMd && onOpenLinkedDoc) {
-        parts.push(
-          <a
-            key={key++}
-            href={linkUrl}
-            onClick={(e) => {
-              e.preventDefault();
-              onOpenLinkedDoc(linkUrl);
-            }}
-            className="text-primary underline underline-offset-2 hover:text-primary/80 inline-flex items-center gap-1 cursor-pointer"
-            title={`Open: ${linkUrl}`}
-          >
-            {linkText}
-            <svg className="w-3 h-3 opacity-50 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-            </svg>
-          </a>
-        );
-      } else if (isLocalMd) {
+      if (isLocalMd) {
         // No handler — render as plain link (e.g., in shared/portal views)
         parts.push(
           <a
@@ -1021,7 +772,7 @@ const parseTableContent = (content: string): { headers: string[]; rows: string[]
   return { headers, rows };
 };
 
-const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) => void }> = ({ block, onOpenLinkedDoc }) => {
+const BlockRenderer: React.FC<{ block: Block }> = ({ block }) => {
   switch (block.type) {
     case 'heading':
       const Tag = `h${block.level || 1}` as keyof JSX.IntrinsicElements;
@@ -1031,7 +782,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
         3: 'text-base font-semibold mb-2 mt-6 text-foreground/80',
       }[block.level || 1] || 'text-base font-semibold mb-2 mt-4';
 
-      return <Tag className={styles} data-block-id={block.id} data-block-type="heading"><InlineMarkdown text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} /></Tag>;
+      return <Tag className={styles} data-block-id={block.id} data-block-type="heading"><InlineMarkdown text={block.content} /></Tag>;
 
     case 'blockquote':
       return (
@@ -1039,7 +790,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
           className="border-l-2 border-primary/50 pl-4 my-4 text-muted-foreground italic"
           data-block-id={block.id}
         >
-          <InlineMarkdown text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} />
+          <InlineMarkdown text={block.content} />
         </blockquote>
       );
 
@@ -1070,7 +821,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
             )}
           </span>
           <span className={`text-sm leading-relaxed ${isCheckbox && block.checked ? 'text-muted-foreground line-through' : 'text-foreground/90'}`}>
-            <InlineMarkdown text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} />
+            <InlineMarkdown text={block.content} />
           </span>
         </div>
       );
@@ -1091,7 +842,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
                     key={i}
                     className="px-3 py-2 text-left font-semibold text-foreground/90 bg-muted/30"
                   >
-                    <InlineMarkdown text={header} onOpenLinkedDoc={onOpenLinkedDoc} />
+                    <InlineMarkdown text={header} />
                   </th>
                 ))}
               </tr>
@@ -1101,7 +852,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
                 <tr key={rowIdx} className="border-b border-border/50 hover:bg-muted/20">
                   {row.map((cell, cellIdx) => (
                     <td key={cellIdx} className="px-3 py-2 text-foreground/80">
-                      <InlineMarkdown text={cell} onOpenLinkedDoc={onOpenLinkedDoc} />
+                      <InlineMarkdown text={cell} />
                     </td>
                   ))}
                 </tr>
@@ -1121,7 +872,7 @@ const BlockRenderer: React.FC<{ block: Block; onOpenLinkedDoc?: (path: string) =
           className="mb-4 leading-relaxed text-foreground/90 text-[15px]"
           data-block-id={block.id}
         >
-          <InlineMarkdown text={block.content} onOpenLinkedDoc={onOpenLinkedDoc} />
+          <InlineMarkdown text={block.content} />
         </p>
       );
   }

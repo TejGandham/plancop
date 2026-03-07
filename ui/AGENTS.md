@@ -9,59 +9,59 @@ React 19 single-page app. Vite 6 build with `vite-plugin-singlefile` — outputs
 ```
 ui/
 ├── src/
-│   ├── App.tsx                    # Main component — 25+ useState, all state lives here
+│   ├── App.tsx                    # Main component — ~861 LOC, all state lives here
 │   ├── types.ts                   # UI-specific types (Annotation, Block, EditorMode)
 │   ├── index.css                  # Tailwind imports + custom styles
-│   ├── components/                # ~28 components
-│   │   ├── Viewer.tsx             # Markdown viewer with web-highlighter annotations (700+ LOC)
-│   │   ├── Settings.tsx           # User preferences panel (500+ LOC)
+│   ├── components/                # ~20 components
+│   │   ├── Viewer.tsx             # Markdown viewer with web-highlighter annotations (~951 LOC)
+│   │   ├── Settings.tsx           # User preferences panel (~191 LOC)
 │   │   ├── AnnotationPanel.tsx    # Right sidebar — annotation list, edit, delete
+│   │   ├── AnnotationSidebar.tsx  # Sidebar wrapper for annotation panel
+│   │   ├── AnnotationToolbar.tsx  # Toolbar for annotation actions
 │   │   ├── TableOfContents.tsx    # Left sidebar — heading nav, annotation counts
 │   │   ├── ThemeProvider.tsx      # Dark/light/system theme context
-│   │   ├── ExportModal.tsx        # Export to Obsidian, Bear, or download
-│   │   ├── ImportModal.tsx        # Import annotations from share URL
-│   │   ├── plan-diff/             # 7 files — plan version comparison
-│   │   ├── sidebar/               # 3 files — TOC + version browser container
+│   │   ├── ModeToggle.tsx         # Dark mode toggle button
+│   │   ├── ModeSwitcher.tsx       # Editor mode switcher (selection/comment/redline)
+│   │   ├── CompletionOverlay.tsx  # Post-submission overlay
+│   │   ├── ConfirmDialog.tsx      # Generic confirm dialog
+│   │   ├── ErrorBoundary.tsx      # React error boundary
+│   │   ├── LoadingScreen.tsx      # Loading state
+│   │   ├── MermaidBlock.tsx       # Mermaid diagram renderer
+│   │   ├── ResizeHandle.tsx       # Draggable panel resize handle
+│   │   ├── AttachmentsButton.tsx  # Image attachment handling
+│   │   ├── ImageThumbnail.tsx     # Image preview thumbnail
+│   │   ├── sidebar/               # 2 files — sidebar container + tabs
 │   │   └── ImageAnnotator/        # 5 files — image markup with freehand drawing
-│   ├── hooks/                     # 10 custom hooks
-│   │   ├── useSharing.ts          # URL-based annotation sharing (deflate-raw + base64url)
-│   │   ├── usePlanDiff.ts         # Version fetching, diff computation
-│   │   ├── useLinkedDoc.ts        # Navigate between linked docs, stash/restore state
-│   │   ├── useAgents.ts           # Fetch OpenCode agent list from API
+│   ├── hooks/                     # 5 custom hooks
 │   │   ├── useSidebar.ts          # Sidebar open/close, active tab
 │   │   ├── useActiveSection.ts    # Track heading in viewport (IntersectionObserver)
 │   │   ├── useResizablePanel.ts   # Draggable panel resize with cookie persistence
 │   │   ├── useAutoClose.ts        # Auto-close tab after delay
-│   │   ├── useUpdateCheck.ts      # Check for UI version updates
 │   │   └── useDismissOnOutsideAndEscape.ts
-│   ├── utils/                     # 16 utilities
+│   ├── utils/                     # 6 utilities
 │   │   ├── parser.ts              # parseMarkdownToBlocks(), extractFrontmatter()
 │   │   ├── feedback.ts            # formatFeedback() — annotations → human-readable text
-│   │   ├── sharing.ts             # compress/decompress, generateShareUrl()
 │   │   ├── storage.ts             # Cookie-based getItem/setItem (NOT localStorage)
-│   │   ├── planDiffEngine.ts      # computePlanDiff() — line-level diff
 │   │   ├── annotationHelpers.ts   # Annotation manipulation helpers
-│   │   ├── obsidian.ts            # Obsidian vault integration
-│   │   ├── bear.ts                # Bear notes integration
-│   │   └── ...                    # identity, editorMode, permissionMode, etc.
+│   │   ├── editorMode.ts          # Editor mode helpers
+│   │   └── uiPreferences.ts       # UI preference helpers
 │   └── __tests__/                 # 2 test files (shortcuts, reviewApi)
 ├── vite.config.ts                 # Single-file build, @tailwindcss/vite, React plugin
 ├── package.json                   # Own deps (react, tailwind, mermaid, etc.)
 ├── index.html                     # Vite entry point
-└── public/                        # Static assets (sprites)
+└── public/                        # Static assets
 ```
 
 ## State Management
 
-**No external library.** All state in `App.tsx` via 25+ `useState` hooks. Props flow down, callbacks flow up.
+**No external library.** All state in `App.tsx` via `useState` hooks. Props flow down, callbacks flow up.
 
 Key state groups:
 - **Content**: `markdown`, `annotations`, `blocks`, `frontmatter`
-- **UI**: `isPanelOpen`, `editorMode`, `taterMode`, `showExport`, `showImport`
-- **Features**: `isPlanDiffActive`, `planDiffMode`, `versionInfo`, `sharingEnabled`
-- **Submission**: `isSubmitting`, `submitted`, `showFeedbackPrompt`
+- **UI**: `isPanelOpen`, `editorMode`, `showFeedbackPrompt`
+- **Submission**: `isSubmitting`, `submitted`
 
-Custom hooks isolate concerns: `useSharing` (URL sharing), `usePlanDiff` (version diffs), `useLinkedDoc` (doc navigation), `useSidebar` (panel state).
+Custom hooks isolate concerns: `useSidebar` (panel state), `useActiveSection` (viewport tracking), `useResizablePanel` (drag resize).
 
 ## Where to Look
 
@@ -79,7 +79,7 @@ Custom hooks isolate concerns: `useSharing` (URL sharing), `usePlanDiff` (versio
 ## Conventions
 
 - **Cookies, not localStorage** — `storage.ts` wraps cookies because port changes each invocation. localStorage is origin-scoped (includes port) so data would be lost.
-- **No routing** — Single-page app. Modals/sidebars for navigation. `useLinkedDoc` for doc stashing.
+- **No routing** — Single-page app. Modals/sidebars for navigation.
 - **Tailwind CSS 4** — `@tailwindcss/vite` plugin. No tailwind.config.js needed. CSS variables for theming.
 - **Single-file build** — `vite-plugin-singlefile` inlines all JS/CSS into one HTML file (~5MB). Server reads this directly.
 - **Annotation types** — DELETION, INSERTION, REPLACEMENT, COMMENT, GLOBAL_COMMENT (see `types.ts`)
@@ -102,19 +102,18 @@ expect(fetchMock).toHaveBeenCalledWith('/api/approve', { method: 'POST' });
 ```
 
 - Environment: happy-dom (via vitest.config.ts)
-- Component tests in `components/__tests__/` — Viewer, PlanDiffViewer
+- Component tests in `components/__tests__/` — Viewer
 - API tests in `__tests__/` — shortcuts, reviewApi
 - No E2E tests
 
 ## Coverage
 
 These UI files have enforced thresholds (90% lines/funcs, 80% branches):
-- `utils/feedback.ts`, `utils/parser.ts`, `utils/annotationHelpers.ts`, `utils/planDiffEngine.ts`
+- `utils/feedback.ts`, `utils/parser.ts`, `utils/annotationHelpers.ts`
 
 ## Gotchas
 
-- **App.tsx is ~1600 LOC** — All state lives here. Read it before modifying any component.
+- **App.tsx is ~861 LOC** — All state lives here. Read it before modifying any component.
 - **web-highlighter** — `@plannotator/web-highlighter` manages annotation DOM. Don't fight it.
 - **Build required** — Server reads `ui/dist/index.html`. Always `npm run build` after UI changes.
 - **No hot reload in production** — Dev server is `npm run dev` (port 5173). Production is served by hook server.
-- **Sprites** — Tater character animations in `public/sprite_package_*`. Not code — asset files.

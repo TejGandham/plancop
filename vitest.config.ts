@@ -16,12 +16,10 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: [
-        'server/storage-versions.ts',
         'src/types/hook.ts',
         'ui/src/utils/feedback.ts',
         'ui/src/utils/parser.ts',
         'ui/src/utils/annotationHelpers.ts',
-        'ui/src/utils/planDiffEngine.ts',
       ],
       exclude: ['node_modules', 'dist', '**/*.test.ts', '**/*.test.tsx'],
       thresholds: {

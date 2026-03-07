@@ -1,10 +1,15 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { postApproveDecision, postDenyDecision } from '../App';
 import { formatFeedback } from '../utils/feedback';
 import { AnnotationType, type Annotation } from '../types';
 
+beforeEach(() => {
+  (window as Record<string, unknown>).__PLANCOP_TOKEN__ = 'test-token-123';
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
+  delete (window as Record<string, unknown>).__PLANCOP_TOKEN__;
 });
 
 function makeAnnotation(overrides: Partial<Annotation> = {}): Annotation {
@@ -22,16 +27,19 @@ function makeAnnotation(overrides: Partial<Annotation> = {}): Annotation {
 }
 
 describe('review API wiring', () => {
-  it('approve sends POST /api/approve', async () => {
+  it('approve sends POST /api/approve with auth header', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
 
     await postApproveDecision(fetchMock as unknown as typeof fetch);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith('/api/approve', { method: 'POST' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/approve', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer test-token-123' },
+    });
   });
 
-  it('deny sends POST /api/deny with formatted feedback reason', async () => {
+  it('deny sends POST /api/deny with auth header and formatted feedback reason', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     const annotations: Annotation[] = [
       makeAnnotation({
@@ -50,7 +58,10 @@ describe('review API wiring', () => {
     const [url, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('/api/deny');
     expect(requestInit.method).toBe('POST');
-    expect(requestInit.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(requestInit.headers).toEqual({
+      'Authorization': 'Bearer test-token-123',
+      'Content-Type': 'application/json',
+    });
     expect(JSON.parse(String(requestInit.body))).toEqual({ reason: expectedReason });
   });
 });

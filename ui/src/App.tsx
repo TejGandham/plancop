@@ -1,53 +1,26 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { parseMarkdownToBlocks, exportAnnotations, exportLinkedDocAnnotations, extractFrontmatter, Frontmatter } from './utils/parser';
+import { parseMarkdownToBlocks, exportAnnotations, extractFrontmatter, Frontmatter } from './utils/parser';
 import { Viewer, ViewerHandle } from './components/Viewer';
 import { AnnotationPanel } from './components/AnnotationPanel';
-import { ExportModal } from './components/ExportModal';
-import { ImportModal } from './components/ImportModal';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { Annotation, Block, EditorMode, type ImageAttachment } from './types';
 import { ThemeProvider } from './components/ThemeProvider';
 import { ModeToggle } from './components/ModeToggle';
 import { ModeSwitcher } from './components/ModeSwitcher';
-import { TaterSpriteRunning } from './components/TaterSpriteRunning';
-import { TaterSpritePullup } from './components/TaterSpritePullup';
 import { Settings } from './components/Settings';
-import { useSharing } from './hooks/useSharing';
-import { useAgents } from './hooks/useAgents';
 import { useActiveSection } from './hooks/useActiveSection';
-import { storage } from './utils/storage';
 import { CompletionOverlay } from './components/CompletionOverlay';
-import { UpdateBanner } from './components/UpdateBanner';
-import { getObsidianSettings, getEffectiveVaultPath, isObsidianConfigured, CUSTOM_PATH_SENTINEL } from './utils/obsidian';
-import { getBearSettings } from './utils/bear';
-import { getDefaultNotesApp } from './utils/defaultNotesApp';
-import { getAgentSwitchSettings, getEffectiveAgentName } from './utils/agentSwitch';
-import { getPlanSaveSettings } from './utils/planSave';
-import { getUIPreferences, needsUIFeaturesSetup, type UIPreferences } from './utils/uiPreferences';
+import { getUIPreferences, type UIPreferences } from './utils/uiPreferences';
 import { getEditorMode, saveEditorMode } from './utils/editorMode';
 import { useResizablePanel } from './hooks/useResizablePanel';
 import { ResizeHandle } from './components/ResizeHandle';
-import {
-  getPermissionModeSettings,
-  needsPermissionModeSetup,
-  type PermissionMode,
-} from './utils/permissionMode';
-import { PermissionModeSetup } from './components/PermissionModeSetup';
-import { UIFeaturesSetup } from './components/UIFeaturesSetup';
-import { PlanDiffMarketing } from './components/plan-diff/PlanDiffMarketing';
-import { needsPlanDiffMarketingDialog } from './utils/planDiffMarketing';
 import { ImageAnnotator } from './components/ImageAnnotator';
 import { deriveImageName } from './components/AttachmentsButton';
 import { useSidebar } from './hooks/useSidebar';
-import { usePlanDiff, type VersionInfo } from './hooks/usePlanDiff';
-import { useLinkedDoc } from './hooks/useLinkedDoc';
 import { SidebarTabs } from './components/sidebar/SidebarTabs';
-import { SidebarContainer } from './components/sidebar/SidebarContainer';
-import { PlanDiffViewer } from './components/plan-diff/PlanDiffViewer';
-import type { PlanDiffMode } from './components/plan-diff/PlanDiffModeSwitcher';
+import { TableOfContents } from './components/TableOfContents';
 import { formatFeedback } from './utils/feedback';
 import { LoadingScreen } from './components/LoadingScreen';
-
 
 const PLAN_CONTENT = `# Implementation Plan: Real-time Collaboration
 
@@ -78,151 +51,60 @@ Set up a WebSocket server to handle concurrent connections:
 
 \`\`\`typescript
 const server = new WebSocketServer({ port: 8080 });
-
-server.on('connection', (socket, request) => {
-  const sessionId = generateSessionId();
-  sessions.set(sessionId, socket);
-
-  socket.on('message', (data) => {
-    broadcast(sessionId, data);
-  });
-});
 \`\`\`
 
-### Client Connection
-- Establish persistent connection on document load
-  - Initialize WebSocket with authentication token
-  - Set up heartbeat ping/pong every 30 seconds
-  - Handle connection state changes (connecting, open, closing, closed)
-- Implement reconnection logic with exponential backoff
-  - Start with 1 second delay
-  - Double delay on each retry (max 30 seconds)
-  - Reset delay on successful connection
-- Handle offline state gracefully
-  - Queue local changes in IndexedDB
-  - Show offline indicator in UI
-  - Sync queued changes on reconnect
+## Phase 2: Operational Transform
 
-### Database Schema
-
-\`\`\`sql
-CREATE TABLE documents (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  title VARCHAR(255) NOT NULL,
-  content JSONB NOT NULL DEFAULT '{}',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE TABLE collaborators (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL,
-  role VARCHAR(50) DEFAULT 'editor',
-  cursor_position JSONB,
-  last_seen_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE INDEX idx_collaborators_document ON collaborators(document_id);
-\`\`\`
-
-## Phase 2: Operational Transforms
-
-> The key insight is that we need to transform operations against concurrent operations to maintain consistency.
-
-Key requirements:
-- Transform insert against insert
-  - Same position: use user ID for deterministic ordering
-  - Different positions: adjust offset of later operation
-- Transform insert against delete
-  - Insert before delete: no change needed
-  - Insert inside deleted range: special handling required
-    - Option A: Move insert to delete start position
-    - Option B: Discard the insert entirely
-  - Insert after delete: adjust insert position
-- Transform delete against delete
-  - Non-overlapping: adjust positions
-  - Overlapping: merge or split operations
-- Maintain cursor positions across transforms
-  - Track cursor as a zero-width insert operation
-  - Update cursor position after each transform
-
-### Transform Implementation
+### Core Algorithm
+Implement the OT algorithm for conflict resolution:
 
 \`\`\`typescript
 interface Operation {
-  type: 'insert' | 'delete';
+  type: 'insert' | 'delete' | 'retain';
   position: number;
   content?: string;
   length?: number;
-  userId: string;
-  timestamp: number;
 }
 
-class OperationalTransform {
-  private pendingOps: Operation[] = [];
-  private history: Operation[] = [];
-
-  transform(op1: Operation, op2: Operation): [Operation, Operation] {
-    if (op1.type === 'insert' && op2.type === 'insert') {
-      if (op1.position <= op2.position) {
-        return [op1, { ...op2, position: op2.position + (op1.content?.length || 0) }];
-      } else {
-        return [{ ...op1, position: op1.position + (op2.content?.length || 0) }, op2];
-      }
+function transform(op1: Operation, op2: Operation): [Operation, Operation] {
+  // Transform op1 against op2 and vice versa
+  if (op1.type === 'insert' && op2.type === 'insert') {
+    if (op1.position <= op2.position) {
+      return [op1, { ...op2, position: op2.position + (op1.content?.length ?? 0) }];
     }
-
-    if (op1.type === 'delete' && op2.type === 'delete') {
-      // Complex delete vs delete transformation
-      const op1End = op1.position + (op1.length || 0);
-      const op2End = op2.position + (op2.length || 0);
-
-      if (op1End <= op2.position) {
-        return [op1, { ...op2, position: op2.position - (op1.length || 0) }];
-      }
-      // ... more cases
-    }
-
-    return [op1, op2];
+    return [{ ...op1, position: op1.position + (op2.content?.length ?? 0) }, op2];
   }
-
-  apply(doc: string, op: Operation): string {
-    if (op.type === 'insert') {
-      return doc.slice(0, op.position) + op.content + doc.slice(op.position);
-    } else {
-      return doc.slice(0, op.position) + doc.slice(op.position + (op.length || 0));
-    }
-  }
+  return [op1, op2];
 }
 \`\`\`
 
-## Phase 3: UI Updates
+## Phase 3: Client Integration
 
-1. Show collaborator cursors in real-time
-   - Render cursor as colored vertical line
-   - Add name label above cursor
-   - Animate cursor movement smoothly
-2. Display presence indicators
-   - Avatar stack in header
-   - Dropdown with full collaborator list
-     - Show online/away status
-     - Display last activity time
-     - Allow @mentioning collaborators
-3. Add conflict resolution UI
-   - Highlight conflicting regions
-   - Show diff comparison panel
-   - Provide merge options:
-     - Accept mine
-     - Accept theirs
-     - Manual merge
-4. Implement undo/redo stack per user
-   - Track operations by user ID
-   - Allow undoing only own changes
-   - Show undo history in sidebar
+### React Hook
+\`\`\`typescript
+function useCollaboration(documentId: string) {
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const ws = useRef<WebSocket | null>(null);
 
-### React Component for Cursors
+  useEffect(() => {
+    ws.current = new WebSocket(\`ws://localhost:8080/doc/\${documentId}\`);
+    ws.current.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'collaborators') {
+        setCollaborators(data.collaborators);
+      }
+    };
+    return () => ws.current?.close();
+  }, [documentId]);
 
-\`\`\`tsx
+  return { collaborators };
+}
+\`\`\`
+
+## Phase 4: Cursor Tracking
+
+### Cursor Overlay Component
+\`\`\`typescript
 import React, { useEffect, useState } from 'react';
 import { useCollaboration } from './hooks/useCollaboration';
 
@@ -279,7 +161,6 @@ export const CursorOverlay: React.FC<CursorOverlayProps> = ({
 \`\`\`
 
 ### Configuration
-
 \`\`\`json
 {
   "collaboration": {
@@ -344,8 +225,19 @@ export const CursorOverlay: React.FC<CursorOverlayProps> = ({
 
 type FetchImpl = typeof fetch;
 
+function getSessionToken(): string {
+  return (window as Record<string, unknown>).__PLANCOP_TOKEN__ as string ?? '';
+}
+
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
+  return { 'Authorization': `Bearer ${getSessionToken()}`, ...extra };
+}
+
 export async function postApproveDecision(fetchImpl: FetchImpl = fetch): Promise<void> {
-  await fetchImpl('/api/approve', { method: 'POST' });
+  await fetchImpl('/api/approve', {
+    method: 'POST',
+    headers: authHeaders(),
+  });
 }
 
 export async function postDenyDecision(
@@ -356,12 +248,15 @@ export async function postDenyDecision(
 
   await fetchImpl('/api/deny', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ reason }),
   });
 
   return reason;
 }
+
+const getIdentity = () => 'reviewer';
+const isCurrentUser = () => true;
 
 const App: React.FC = () => {
   const [markdown, setMarkdown] = useState(PLAN_CONTENT);
@@ -369,19 +264,11 @@ const App: React.FC = () => {
   const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [frontmatter, setFrontmatter] = useState<Frontmatter | null>(null);
-  const [showExport, setShowExport] = useState(false);
-  const [showImport, setShowImport] = useState(false);
   const [showFeedbackPrompt, setShowFeedbackPrompt] = useState(false);
   const [showClaudeCodeWarning, setShowClaudeCodeWarning] = useState(false);
-  const [showAgentWarning, setShowAgentWarning] = useState(false);
-  const [agentWarningMessage, setAgentWarningMessage] = useState('');
   const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [editorMode, setEditorMode] = useState<EditorMode>(getEditorMode);
-  const [taterMode, setTaterMode] = useState(() => {
-    const stored = storage.getItem('plannotator-tater-mode');
-    return stored === 'true';
-  });
-  const [uiPrefs, setUiPrefs] = useState(() => getUIPreferences());
+  const [uiPrefs, setUiPrefs] = useState<UIPreferences>(getUIPreferences);
   const [isApiMode, setIsApiMode] = useState(false);
   const [origin, setOrigin] = useState<'claude-code' | 'opencode' | 'pi' | null>(null);
   const [globalAttachments, setGlobalAttachments] = useState<ImageAttachment[]>([]);
@@ -390,170 +277,77 @@ const App: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState<'approved' | 'denied' | null>(null);
   const [pendingPasteImage, setPendingPasteImage] = useState<{ file: File; blobUrl: string; initialName: string } | null>(null);
-  const [showPermissionModeSetup, setShowPermissionModeSetup] = useState(false);
-  const [showUIFeaturesSetup, setShowUIFeaturesSetup] = useState(false);
-  const [showPlanDiffMarketing, setShowPlanDiffMarketing] = useState(false);
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>('bypassPermissions');
-  const [sharingEnabled, setSharingEnabled] = useState(true);
-  const [shareBaseUrl, setShareBaseUrl] = useState<string | undefined>(undefined);
   const [repoInfo, setRepoInfo] = useState<{ display: string; branch?: string } | null>(null);
-  const [showExportDropdown, setShowExportDropdown] = useState(false);
-  const [initialExportTab, setInitialExportTab] = useState<'share' | 'annotations' | 'notes'>();
-  const [noteSaveToast, setNoteSaveToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  // Plan diff state
-  const [isPlanDiffActive, setIsPlanDiffActive] = useState(false);
-  const [planDiffMode, setPlanDiffMode] = useState<PlanDiffMode>('clean');
-  const [previousPlan, setPreviousPlan] = useState<string | null>(null);
-  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
 
   const viewerRef = useRef<ViewerHandle>(null);
-  const containerRef = useRef<HTMLElement>(null);
+  const containerRef = useRef<HTMLElement>(null!);
 
-  // Resizable panels
-  const panelResize = useResizablePanel({ storageKey: 'plannotator-panel-width' });
+  const panelResize = useResizablePanel({ storageKey: 'plancop-panel-width' });
   const tocResize = useResizablePanel({
-    storageKey: 'plannotator-toc-width',
-    defaultWidth: 240, minWidth: 160, maxWidth: 400, side: 'left',
+    storageKey: 'plancop-toc-width',
+    defaultWidth: 240,
+    minWidth: 160,
+    maxWidth: 400,
+    side: 'left',
   });
   const isResizing = panelResize.isDragging || tocResize.isDragging;
 
-  // Sidebar (shared TOC + Version Browser)
   const sidebar = useSidebar(getUIPreferences().tocEnabled);
 
-  // Sync sidebar open state when preference changes in Settings
   useEffect(() => {
     if (uiPrefs.tocEnabled) {
       sidebar.open('toc');
     } else {
       sidebar.close();
     }
-  }, [uiPrefs.tocEnabled]);
+  }, [uiPrefs.tocEnabled, sidebar]);
 
-  // Plan diff computation
-  const planDiff = usePlanDiff(markdown, previousPlan, versionInfo);
-
-  // Linked document navigation
-  const linkedDocHook = useLinkedDoc({
-    markdown, annotations, selectedAnnotationId, globalAttachments,
-    setMarkdown, setAnnotations, setSelectedAnnotationId, setGlobalAttachments,
-    viewerRef, sidebar,
-  });
-
-  // Track active section for TOC highlighting
-  const headingCount = useMemo(() => blocks.filter(b => b.type === 'heading').length, [blocks]);
+  const headingCount = useMemo(() => blocks.filter((block) => block.type === 'heading').length, [blocks]);
   const activeSection = useActiveSection(containerRef, headingCount);
-
-  // URL-based sharing
-  const {
-    isSharedSession,
-    isLoadingShared,
-    shareUrl,
-    shareUrlSize,
-    pendingSharedAnnotations,
-    sharedGlobalAttachments,
-    clearPendingSharedAnnotations,
-    importFromShareUrl,
-  } = useSharing(
-    markdown,
-    annotations,
-    globalAttachments,
-    setMarkdown,
-    setAnnotations,
-    setGlobalAttachments,
-    () => {
-      // When loaded from share, mark as loaded
-      setIsLoading(false);
-    },
-    shareBaseUrl
-  );
-
-  // Fetch available agents for OpenCode (for validation on approve)
-  const { agents: availableAgents, validateAgent, getAgentWarning } = useAgents(origin);
-
-  // Apply shared annotations to DOM after they're loaded
-  useEffect(() => {
-    if (pendingSharedAnnotations && pendingSharedAnnotations.length > 0) {
-      // Small delay to ensure DOM is rendered
-      const timer = setTimeout(() => {
-        // Clear existing highlights first (important when loading new share URL)
-        viewerRef.current?.clearAllHighlights();
-        viewerRef.current?.applySharedAnnotations(pendingSharedAnnotations);
-        clearPendingSharedAnnotations();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [pendingSharedAnnotations, clearPendingSharedAnnotations]);
-
-  const handleTaterModeChange = (enabled: boolean) => {
-    setTaterMode(enabled);
-    storage.setItem('plannotator-tater-mode', String(enabled));
-  };
 
   const handleEditorModeChange = (mode: EditorMode) => {
     setEditorMode(mode);
     saveEditorMode(mode);
   };
 
-  // Check if we're in API mode (served from hook server)
-  // Skip if we loaded from a shared URL
-  // Retries up to 5 times (total ~2.5s) to handle race with server startup
   useEffect(() => {
-    if (isLoadingShared) return; // Wait for share check to complete
-    if (isSharedSession) return; // Already loaded from share
-
     let cancelled = false;
-    const MAX_RETRIES = 5;
-    const RETRY_DELAY_MS = 500;
+    const maxRetries = 5;
+    const retryDelayMs = 500;
 
-    const applyPlanData = (data: { plan: string; origin?: 'claude-code' | 'opencode' | 'pi'; mode?: 'annotate'; sharingEnabled?: boolean; shareBaseUrl?: string; repoInfo?: { display: string; branch?: string }; previousPlan?: string | null; versionInfo?: { version: number; totalVersions: number; project: string } }) => {
+    const applyPlanData = (data: {
+      plan: string;
+      origin?: 'claude-code' | 'opencode' | 'pi';
+      mode?: 'annotate';
+      repoInfo?: { display: string; branch?: string };
+    }) => {
       if (cancelled) return;
       setMarkdown(data.plan);
       setIsApiMode(true);
       if (data.mode === 'annotate') {
         setAnnotateMode(true);
       }
-      if (data.sharingEnabled !== undefined) {
-        setSharingEnabled(data.sharingEnabled);
-      }
-      if (data.shareBaseUrl) {
-        setShareBaseUrl(data.shareBaseUrl);
+      if (data.origin) {
+        setOrigin(data.origin);
       }
       if (data.repoInfo) {
         setRepoInfo(data.repoInfo);
-      }
-      if (data.previousPlan !== undefined) {
-        setPreviousPlan(data.previousPlan);
-      }
-      if (data.versionInfo) {
-        setVersionInfo(data.versionInfo);
-      }
-      if (data.origin) {
-        setOrigin(data.origin);
-        if (data.origin === 'claude-code' && needsPermissionModeSetup()) {
-          setShowPermissionModeSetup(true);
-        } else if (needsUIFeaturesSetup()) {
-          setShowUIFeaturesSetup(true);
-        } else if (needsPlanDiffMarketingDialog()) {
-          setShowPlanDiffMarketing(true);
-        }
-        setPermissionMode(getPermissionModeSettings().mode);
       }
     };
 
     const fetchPlan = async (attempt: number): Promise<void> => {
       try {
-        const res = await fetch('/api/plan');
+        const res = await fetch('/api/plan', { headers: authHeaders() });
         if (!res.ok) throw new Error('Not in API mode');
         const data = await res.json();
         applyPlanData(data);
         setIsLoading(false);
       } catch {
         if (cancelled) return;
-        if (attempt < MAX_RETRIES) {
-          await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+        if (attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
           if (!cancelled) await fetchPlan(attempt + 1);
         } else {
-          // Not in API mode - use default content
           setIsApiMode(false);
           setIsLoading(false);
         }
@@ -561,43 +355,10 @@ const App: React.FC = () => {
     };
 
     fetchPlan(1);
-    return () => { cancelled = true; };
-  }, [isLoadingShared, isSharedSession]);
-
-  useEffect(() => {
-    if (!isApiMode) return;
-
-    const eventSource = new EventSource('/api/events');
-    eventSource.onmessage = (event) => {
-      try {
-        const newPlanData = JSON.parse(event.data) as {
-          plan?: string;
-          previousPlan?: string | null;
-          versionInfo?: VersionInfo | null;
-        };
-
-        if (typeof newPlanData.plan === 'string') {
-          setMarkdown(newPlanData.plan);
-        }
-        if (newPlanData.previousPlan !== undefined) {
-          setPreviousPlan(newPlanData.previousPlan);
-        }
-        if (newPlanData.versionInfo !== undefined) {
-          setVersionInfo(newPlanData.versionInfo);
-        }
-
-        setSubmitted(null);
-        setIsSubmitting(false);
-        setAnnotations([]);
-        setSelectedAnnotationId(null);
-      } catch {
-      }
-    };
-
     return () => {
-      eventSource.close();
+      cancelled = true;
     };
-  }, [isApiMode]);
+  }, []);
 
   useEffect(() => {
     const { frontmatter: fm } = extractFrontmatter(markdown);
@@ -605,19 +366,17 @@ const App: React.FC = () => {
     setBlocks(parseMarkdownToBlocks(markdown));
   }, [markdown]);
 
-  // Global paste listener for image attachments
   useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
+    const handlePaste = (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items;
       if (!items) return;
 
       for (const item of items) {
         if (item.type.startsWith('image/')) {
-          e.preventDefault();
+          event.preventDefault();
           const file = item.getAsFile();
           if (file) {
-            // Derive name before showing annotator so user sees it immediately
-            const initialName = deriveImageName(file.name, globalAttachments.map(g => g.name));
+            const initialName = deriveImageName(file.name, globalAttachments.map((img) => img.name));
             const blobUrl = URL.createObjectURL(file);
             setPendingPasteImage({ file, blobUrl, initialName });
           }
@@ -630,7 +389,6 @@ const App: React.FC = () => {
     return () => document.removeEventListener('paste', handlePaste);
   }, [globalAttachments]);
 
-  // Handle paste annotator accept — name comes from ImageAnnotator
   const handlePasteAnnotatorAccept = async (blob: Blob, hasDrawings: boolean, name: string) => {
     if (!pendingPasteImage) return;
 
@@ -641,13 +399,12 @@ const App: React.FC = () => {
         : pendingPasteImage.file;
       formData.append('file', fileToUpload);
 
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const res = await fetch('/api/upload', { method: 'POST', headers: authHeaders(), body: formData });
       if (res.ok) {
         const data = await res.json();
-        setGlobalAttachments(prev => [...prev, { path: data.path, name }]);
+        setGlobalAttachments((prev) => [...prev, { path: data.path, name }]);
       }
     } catch {
-      // Upload failed silently
     } finally {
       URL.revokeObjectURL(pendingPasteImage.blobUrl);
       setPendingPasteImage(null);
@@ -661,6 +418,13 @@ const App: React.FC = () => {
     }
   };
 
+  const annotationsOutput = useMemo(() => {
+    if (annotations.length === 0 && globalAttachments.length === 0) {
+      return 'No changes detected.';
+    }
+    return exportAnnotations(blocks, annotations, globalAttachments);
+  }, [blocks, annotations, globalAttachments]);
+
   const reviewState = isLoading
     ? 'loading'
     : submitted === 'approved'
@@ -669,16 +433,14 @@ const App: React.FC = () => {
         ? 'denied'
         : 'reviewing';
 
-  const canSubmitReviewActions = isApiMode && !linkedDocHook.isActive && reviewState === 'reviewing';
+  const canSubmitReviewActions = isApiMode && reviewState === 'reviewing';
 
-  // API mode handlers
   const handleApprove = async () => {
     if (!canSubmitReviewActions || isSubmitting) {
       return;
     }
 
     setIsSubmitting(true);
-
     try {
       await postApproveDecision();
       setSubmitted('approved');
@@ -693,7 +455,6 @@ const App: React.FC = () => {
     }
 
     setIsSubmitting(true);
-
     try {
       await postDenyDecision(annotations);
       setSubmitted('denied');
@@ -702,70 +463,50 @@ const App: React.FC = () => {
     }
   };
 
-  // Annotate mode handler — sends feedback via /api/feedback
-  const handleAnnotateFeedback = async () => {
+  const handleFeedback = async () => {
+    if (!canSubmitReviewActions || isSubmitting) {
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await fetch('/api/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           feedback: annotationsOutput,
           annotations,
         }),
       });
-      setSubmitted('denied'); // reuse 'denied' state for "feedback sent" overlay
+      setSubmitted('denied');
     } catch {
       setIsSubmitting(false);
     }
   };
 
-  // Global keyboard shortcuts (Cmd/Ctrl+Enter to submit)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle Cmd/Ctrl+Enter
-      if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return;
 
-      // Don't intercept if typing in an input/textarea
-      const tag = (e.target as HTMLElement)?.tagName;
+      const tag = (event.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
-      // Don't intercept if any modal is open
-      if (showExport || showImport || showFeedbackPrompt || showClaudeCodeWarning ||
-          showAgentWarning || showPermissionModeSetup || showUIFeaturesSetup || showPlanDiffMarketing || pendingPasteImage) return;
-
-      // Don't intercept if already submitted or submitting
+      if (showFeedbackPrompt || showClaudeCodeWarning || pendingPasteImage) return;
       if (submitted || isSubmitting) return;
-
-      // Don't intercept in demo/share mode (no API)
       if (!isApiMode) return;
 
-      // Don't submit while viewing a linked doc
-      if (linkedDocHook.isActive) return;
+      event.preventDefault();
 
-      e.preventDefault();
-
-      // Annotate mode: always send feedback
       if (annotateMode) {
         if (annotations.length === 0) {
           setShowFeedbackPrompt(true);
         } else {
-          handleAnnotateFeedback();
+          handleFeedback();
         }
         return;
       }
 
-      // No annotations → Approve, otherwise → Send Feedback
       if (annotations.length === 0) {
-        // Check if agent exists for OpenCode users
-        if (origin === 'opencode') {
-          const warning = getAgentWarning();
-          if (warning) {
-            setAgentWarningMessage(warning);
-            setShowAgentWarning(true);
-            return;
-          }
-        }
         handleApprove();
       } else {
         handleDeny();
@@ -774,291 +515,98 @@ const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
-    showExport, showImport, showFeedbackPrompt, showClaudeCodeWarning, showAgentWarning,
-    showPermissionModeSetup, showUIFeaturesSetup, showPlanDiffMarketing, pendingPasteImage,
-    submitted, isSubmitting, isApiMode, linkedDocHook.isActive, annotations.length, annotateMode,
-    origin, getAgentWarning,
-  ]);
+  }, [showFeedbackPrompt, showClaudeCodeWarning, pendingPasteImage, submitted, isSubmitting, isApiMode, annotateMode, annotations.length]);
 
-  // Cmd/Ctrl+Shift+Enter keyboard shortcut — deny/send feedback
   useEffect(() => {
-    const handleDenyShortcut = (e: KeyboardEvent) => {
-      // Only handle Cmd/Ctrl+Shift+Enter
-      if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey) || !e.shiftKey) return;
+    const handleDenyShortcut = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
 
-      // Don't intercept if typing in an input/textarea
-      const tag = (e.target as HTMLElement)?.tagName;
+      const tag = (event.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
-      // Don't intercept if any modal is open
-      if (showExport || showImport || showFeedbackPrompt || showClaudeCodeWarning ||
-          showAgentWarning || showPermissionModeSetup || showUIFeaturesSetup || showPlanDiffMarketing || pendingPasteImage) return;
-
-      // Don't intercept if already submitted or submitting
+      if (showFeedbackPrompt || showClaudeCodeWarning || pendingPasteImage) return;
       if (submitted || isSubmitting) return;
-
-      // Don't intercept in demo/share mode (no API)
       if (!isApiMode) return;
 
-      // Don't submit while viewing a linked doc
-      if (linkedDocHook.isActive) return;
+      event.preventDefault();
 
-      e.preventDefault();
-
-      // Annotate mode: send feedback
       if (annotateMode) {
-        handleAnnotateFeedback();
+        if (annotations.length === 0) {
+          setShowFeedbackPrompt(true);
+        } else {
+          handleFeedback();
+        }
         return;
       }
 
-      // Always deny/send feedback
       handleDeny();
     };
 
     window.addEventListener('keydown', handleDenyShortcut);
     return () => window.removeEventListener('keydown', handleDenyShortcut);
-  }, [
-    showExport, showImport, showFeedbackPrompt, showClaudeCodeWarning, showAgentWarning,
-    showPermissionModeSetup, showUIFeaturesSetup, showPlanDiffMarketing, pendingPasteImage,
-    submitted, isSubmitting, isApiMode, linkedDocHook.isActive, annotateMode,
-  ]);
+  }, [showFeedbackPrompt, showClaudeCodeWarning, pendingPasteImage, submitted, isSubmitting, isApiMode, annotateMode, annotations.length]);
 
-  // Escape key — cancel annotation/close modals
   useEffect(() => {
-    const handleEscapeKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
 
-      // Close export modal
-      if (showExport) {
-        setShowExport(false);
-        e.preventDefault();
-        return;
-      }
-
-      // Close import modal
-      if (showImport) {
-        setShowImport(false);
-        e.preventDefault();
-        return;
-      }
-
-      // Close feedback prompt
       if (showFeedbackPrompt) {
         setShowFeedbackPrompt(false);
-        e.preventDefault();
+        event.preventDefault();
         return;
       }
 
-      // Close Claude Code warning
       if (showClaudeCodeWarning) {
         setShowClaudeCodeWarning(false);
-        e.preventDefault();
+        event.preventDefault();
         return;
       }
 
-      // Close agent warning
-      if (showAgentWarning) {
-        setShowAgentWarning(false);
-        e.preventDefault();
-        return;
-      }
-
-      // Close permission mode setup
-      if (showPermissionModeSetup) {
-        setShowPermissionModeSetup(false);
-        e.preventDefault();
-        return;
-      }
-
-      // Close UI features setup
-      if (showUIFeaturesSetup) {
-        setShowUIFeaturesSetup(false);
-        e.preventDefault();
-        return;
-      }
-
-      // Close plan diff marketing
-      if (showPlanDiffMarketing) {
-        setShowPlanDiffMarketing(false);
-        e.preventDefault();
-        return;
-      }
-
-      // Close pending paste image annotator
       if (pendingPasteImage) {
         handlePasteAnnotatorClose();
-        e.preventDefault();
-        return;
+        event.preventDefault();
       }
     };
 
     window.addEventListener('keydown', handleEscapeKey);
     return () => window.removeEventListener('keydown', handleEscapeKey);
-  }, [
-    showExport, showImport, showFeedbackPrompt, showClaudeCodeWarning, showAgentWarning,
-    showPermissionModeSetup, showUIFeaturesSetup, showPlanDiffMarketing, pendingPasteImage,
-  ]);
+  }, [showFeedbackPrompt, showClaudeCodeWarning, pendingPasteImage]);
 
-  const handleAddAnnotation = (ann: Annotation) => {
-    setAnnotations(prev => [...prev, ann]);
-    setSelectedAnnotationId(ann.id);
+  const handleAddAnnotation = (annotation: Annotation) => {
+    const withAuthor = annotation.author || isCurrentUser()
+      ? { ...annotation, author: annotation.author ?? getIdentity() }
+      : annotation;
+    setAnnotations((prev) => [...prev, withAuthor]);
+    setSelectedAnnotationId(annotation.id);
     setIsPanelOpen(true);
   };
 
   const handleDeleteAnnotation = (id: string) => {
     viewerRef.current?.removeHighlight(id);
-    setAnnotations(prev => prev.filter(a => a.id !== id));
-    if (selectedAnnotationId === id) setSelectedAnnotationId(null);
+    setAnnotations((prev) => prev.filter((annotation) => annotation.id !== id));
+    if (selectedAnnotationId === id) {
+      setSelectedAnnotationId(null);
+    }
   };
 
   const handleEditAnnotation = (id: string, updates: Partial<Annotation>) => {
-    setAnnotations(prev => prev.map(ann =>
-      ann.id === id ? { ...ann, ...updates } : ann
-    ));
-  };
-
-  const handleIdentityChange = (oldIdentity: string, newIdentity: string) => {
-    setAnnotations(prev => prev.map(ann =>
-      ann.author === oldIdentity ? { ...ann, author: newIdentity } : ann
-    ));
+    setAnnotations((prev) => prev.map((annotation) => (
+      annotation.id === id ? { ...annotation, ...updates } : annotation
+    )));
   };
 
   const handleAddGlobalAttachment = (image: ImageAttachment) => {
-    setGlobalAttachments(prev => [...prev, image]);
+    setGlobalAttachments((prev) => [...prev, image]);
   };
 
   const handleRemoveGlobalAttachment = (path: string) => {
-    setGlobalAttachments(prev => prev.filter(p => p.path !== path));
+    setGlobalAttachments((prev) => prev.filter((image) => image.path !== path));
   };
-
 
   const handleTocNavigate = (blockId: string) => {
-    // Navigation handled by TableOfContents component
-    // This is just a placeholder for future custom logic
+    const target = containerRef.current?.querySelector(`[data-block-id="${blockId}"]`) as HTMLElement | null;
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-
-  const annotationsOutput = useMemo(() => {
-    const docAnnotations = linkedDocHook.getDocAnnotations();
-    const hasDocAnnotations = Array.from(docAnnotations.values()).some(
-      (d) => d.annotations.length > 0 || d.globalAttachments.length > 0
-    );
-    const hasPlanAnnotations = annotations.length > 0 || globalAttachments.length > 0;
-
-    if (!hasPlanAnnotations && !hasDocAnnotations) {
-      return 'No changes detected.';
-    }
-
-    let output = hasPlanAnnotations
-      ? exportAnnotations(blocks, annotations, globalAttachments)
-      : '';
-
-    if (hasDocAnnotations) {
-      output += exportLinkedDocAnnotations(docAnnotations);
-    }
-
-    return output;
-  }, [blocks, annotations, globalAttachments, linkedDocHook.getDocAnnotations]);
-
-  // Quick-save handlers for export dropdown and keyboard shortcut
-  const handleDownloadAnnotations = () => {
-    setShowExportDropdown(false);
-    const blob = new Blob([annotationsOutput], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'annotations.md';
-    a.click();
-    URL.revokeObjectURL(url);
-    setNoteSaveToast({ type: 'success', message: 'Downloaded annotations' });
-    setTimeout(() => setNoteSaveToast(null), 3000);
-  };
-
-  const handleQuickSaveToNotes = async (target: 'obsidian' | 'bear') => {
-    setShowExportDropdown(false);
-    const body: { obsidian?: object; bear?: object } = {};
-
-    if (target === 'obsidian') {
-      const s = getObsidianSettings();
-      const vaultPath = getEffectiveVaultPath(s);
-      if (vaultPath) {
-        body.obsidian = { vaultPath, folder: s.folder || 'plannotator', plan: markdown };
-      }
-    }
-    if (target === 'bear') {
-      body.bear = { plan: markdown };
-    }
-
-    try {
-      const res = await fetch('/api/save-notes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      const result = data.results?.[target];
-      if (result?.success) {
-        setNoteSaveToast({ type: 'success', message: `Saved to ${target === 'obsidian' ? 'Obsidian' : 'Bear'}` });
-      } else {
-        setNoteSaveToast({ type: 'error', message: result?.error || 'Save failed' });
-      }
-    } catch {
-      setNoteSaveToast({ type: 'error', message: 'Save failed' });
-    }
-    setTimeout(() => setNoteSaveToast(null), 3000);
-  };
-
-  // Cmd/Ctrl+S keyboard shortcut — save to default notes app
-  useEffect(() => {
-    const handleSaveShortcut = (e: KeyboardEvent) => {
-      if (e.key !== 's' || !(e.metaKey || e.ctrlKey)) return;
-
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-
-      if (showExport || showFeedbackPrompt || showClaudeCodeWarning ||
-          showAgentWarning || showPermissionModeSetup || showUIFeaturesSetup || showPlanDiffMarketing || pendingPasteImage) return;
-
-      if (submitted || !isApiMode) return;
-
-      e.preventDefault();
-
-      const defaultApp = getDefaultNotesApp();
-      const obsOk = isObsidianConfigured();
-      const bearOk = getBearSettings().enabled;
-
-      if (defaultApp === 'download') {
-        handleDownloadAnnotations();
-      } else if (defaultApp === 'obsidian' && obsOk) {
-        handleQuickSaveToNotes('obsidian');
-      } else if (defaultApp === 'bear' && bearOk) {
-        handleQuickSaveToNotes('bear');
-      } else {
-        setInitialExportTab('notes');
-        setShowExport(true);
-      }
-    };
-
-    window.addEventListener('keydown', handleSaveShortcut);
-    return () => window.removeEventListener('keydown', handleSaveShortcut);
-  }, [
-    showExport, showFeedbackPrompt, showClaudeCodeWarning, showAgentWarning,
-    showPermissionModeSetup, showUIFeaturesSetup, showPlanDiffMarketing, pendingPasteImage,
-    submitted, isApiMode, markdown, annotationsOutput,
-  ]);
-
-  // Close export dropdown on click outside
-  useEffect(() => {
-    if (!showExportDropdown) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('[data-export-dropdown]')) {
-        setShowExportDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showExportDropdown]);
 
   const agentName = useMemo(() => {
     if (origin === 'opencode') return 'OpenCode';
@@ -1072,520 +620,251 @@ const App: React.FC = () => {
       {isLoading ? (
         <LoadingScreen />
       ) : (
-      <div className="h-screen flex flex-col bg-background overflow-hidden">
-        {/* Tater sprites */}
-        {taterMode && <TaterSpriteRunning />}
-        {/* Minimal Header */}
-        <header className="h-12 flex items-center justify-between px-2 md:px-4 border-b border-border/50 bg-card/50 backdrop-blur-xl sticky top-0 z-20">
-          <div className="flex items-center gap-2 md:gap-3">
-            <a
-              href="https://plannotator.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 md:gap-2 hover:opacity-80 transition-opacity"
-            >
-              <span className="text-sm font-semibold tracking-tight">Plannotator</span>
-            </a>
-            <a
-              href="https://github.com/backnotprop/plannotator/releases"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-muted-foreground font-mono opacity-60 hidden md:inline hover:opacity-100 transition-opacity"
-            >
-              v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0'}
-            </a>
-            {origin && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium hidden md:inline ${
-                origin === 'claude-code'
-                  ? 'bg-orange-500/15 text-orange-400'
-                  : origin === 'pi'
-                    ? 'bg-violet-500/15 text-violet-400'
-                    : 'bg-zinc-500/20 text-zinc-400'
-              }`}>
-                {agentName}
-              </span>
-            )}
-          </div>
+        <div className="h-screen flex flex-col bg-background overflow-hidden">
+          <header className="h-12 flex items-center justify-between px-2 md:px-4 border-b border-border/50 bg-card/50 backdrop-blur-xl sticky top-0 z-20">
+            <div className="flex items-center gap-2 md:gap-3">
+              <span className="text-sm font-semibold tracking-tight">Plancop</span>
+              <a
+                href="https://github.com/TejGandham/plancop/releases"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-muted-foreground font-mono opacity-60 hidden md:inline hover:opacity-100 transition-opacity"
+              >
+                v0.0.0
+              </a>
+              {origin && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium hidden md:inline ${
+                  origin === 'claude-code'
+                    ? 'bg-orange-500/15 text-orange-400'
+                    : origin === 'pi'
+                      ? 'bg-violet-500/15 text-violet-400'
+                      : 'bg-zinc-500/20 text-zinc-400'
+                }`}>
+                  {agentName}
+                </span>
+              )}
+            </div>
 
-          <div className="flex items-center gap-1 md:gap-2">
-            {canSubmitReviewActions && (
-              <>
-                <button
-                  onClick={() => {
-                    if (annotations.length === 0) {
-                      setShowFeedbackPrompt(true);
-                    } else if (annotateMode) {
-                      handleAnnotateFeedback();
-                    } else {
-                      handleDeny();
-                    }
-                  }}
-                  disabled={isSubmitting}
-                  className={`p-1.5 md:px-2.5 md:py-1 rounded-md text-xs font-medium transition-all ${
-                    isSubmitting
-                      ? 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground'
-                      : 'bg-accent/15 text-accent hover:bg-accent/25 border border-accent/30'
-                  }`}
-                  title="Send Feedback"
-                >
-                  <svg className="w-4 h-4 md:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                  <span className="hidden md:inline">{isSubmitting ? 'Sending...' : annotateMode ? 'Send Annotations' : 'Send Feedback'}</span>
-                </button>
-
-                {!annotateMode && <div className="relative group/approve">
+            <div className="flex items-center gap-1 md:gap-2">
+              {canSubmitReviewActions && (
+                <>
                   <button
                     onClick={() => {
-                      // Show warning for Claude Code users with annotations
-                      if (origin === 'claude-code' && annotations.length > 0) {
-                        setShowClaudeCodeWarning(true);
-                        return;
+                      if (annotations.length === 0) {
+                        setShowFeedbackPrompt(true);
+                      } else if (annotateMode) {
+                        handleFeedback();
+                      } else {
+                        handleDeny();
                       }
-
-                      // Check if agent exists for OpenCode users
-                      if (origin === 'opencode') {
-                        const warning = getAgentWarning();
-                        if (warning) {
-                          setAgentWarningMessage(warning);
-                          setShowAgentWarning(true);
-                          return;
-                        }
-                      }
-
-                      handleApprove();
                     }}
                     disabled={isSubmitting}
-                    className={`px-2 py-1 md:px-2.5 rounded-md text-xs font-medium transition-all ${
+                    className={`p-1.5 md:px-2.5 md:py-1 rounded-md text-xs font-medium transition-all ${
                       isSubmitting
                         ? 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground'
-                        : origin === 'claude-code' && annotations.length > 0
-                          ? 'bg-success/50 text-success-foreground/70 hover:bg-success hover:text-success-foreground'
-                          : 'bg-success text-success-foreground hover:opacity-90'
+                        : 'bg-accent/15 text-accent hover:bg-accent/25 border border-accent/30'
                     }`}
+                    title="Send Feedback"
                   >
-                    <span className="md:hidden">{isSubmitting ? '...' : 'OK'}</span>
-                    <span className="hidden md:inline">{isSubmitting ? 'Approving...' : 'Approve'}</span>
+                    <svg className="w-4 h-4 md:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    <span className="hidden md:inline">{isSubmitting ? 'Sending...' : annotateMode ? 'Send Annotations' : 'Send Feedback'}</span>
                   </button>
-                  {origin === 'claude-code' && annotations.length > 0 && (
-                    <div className="absolute top-full right-0 mt-2 px-3 py-2 bg-popover border border-border rounded-lg shadow-xl text-xs text-foreground w-56 text-center opacity-0 invisible group-hover/approve:opacity-100 group-hover/approve:visible transition-all pointer-events-none z-50">
-                      <div className="absolute bottom-full right-4 border-4 border-transparent border-b-border" />
-                      <div className="absolute bottom-full right-4 mt-px border-4 border-transparent border-b-popover" />
-                      {agentName} doesn't support feedback on approval. Your annotations won't be seen.
+
+                  {!annotateMode && (
+                    <div className="relative group/approve">
+                      <button
+                        onClick={() => {
+                          if (origin === 'claude-code' && annotations.length > 0) {
+                            setShowClaudeCodeWarning(true);
+                            return;
+                          }
+                          handleApprove();
+                        }}
+                        disabled={isSubmitting}
+                        className={`px-2 py-1 md:px-2.5 rounded-md text-xs font-medium transition-all ${
+                          isSubmitting
+                            ? 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground'
+                            : origin === 'claude-code' && annotations.length > 0
+                              ? 'bg-success/50 text-success-foreground/70 hover:bg-success hover:text-success-foreground'
+                              : 'bg-success text-success-foreground hover:opacity-90'
+                        }`}
+                      >
+                        <span className="md:hidden">{isSubmitting ? '...' : 'OK'}</span>
+                        <span className="hidden md:inline">{isSubmitting ? 'Approving...' : 'Approve'}</span>
+                      </button>
+                      {origin === 'claude-code' && annotations.length > 0 && (
+                        <div className="absolute top-full right-0 mt-2 px-3 py-2 bg-popover border border-border rounded-lg shadow-xl text-xs text-foreground w-56 text-center opacity-0 invisible group-hover/approve:opacity-100 group-hover/approve:visible transition-all pointer-events-none z-50">
+                          <div className="absolute bottom-full right-4 border-4 border-transparent border-b-border" />
+                          <div className="absolute bottom-full right-4 mt-px border-4 border-transparent border-b-popover" />
+                          {agentName} does not support feedback on approval. Your annotations will not be included.
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>}
 
-                <div className="w-px h-5 bg-border/50 mx-1 hidden md:block" />
+                  <div className="w-px h-5 bg-border/50 mx-1 hidden md:block" />
+                </>
+              )}
+
+              <ModeToggle />
+              <Settings onUIPreferencesChange={setUiPrefs} />
+
+              <button
+                onClick={() => setIsPanelOpen(!isPanelOpen)}
+                className={`p-1.5 rounded-md text-xs font-medium transition-all ${
+                  isPanelOpen
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                </svg>
+              </button>
+            </div>
+          </header>
+
+          <div className={`flex-1 flex overflow-hidden ${isResizing ? 'select-none' : ''}`}>
+            {!sidebar.isOpen && (
+              <SidebarTabs
+                activeTab={sidebar.activeTab}
+                onToggleTab={sidebar.toggleTab}
+                className="hidden lg:flex"
+              />
+            )}
+
+            {sidebar.isOpen && (
+              <>
+                <aside
+                  className="hidden lg:flex flex-col sticky top-12 h-[calc(100vh-3rem)] flex-shrink-0 bg-card/50 backdrop-blur-sm border-r border-border"
+                  style={{ width: tocResize.width }}
+                >
+                  <div className="flex items-center border-b border-border/50 px-2 py-1.5 gap-1 flex-shrink-0">
+                    <button
+                      onClick={sidebar.close}
+                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      title="Close sidebar"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Contents</span>
+                  </div>
+                  <TableOfContents
+                    blocks={blocks}
+                    annotations={annotations}
+                    activeId={activeSection}
+                    onNavigate={handleTocNavigate}
+                    className="flex-1 overflow-y-auto"
+                  />
+                </aside>
+                <ResizeHandle {...tocResize.handleProps} className="hidden lg:block" />
               </>
             )}
 
-            <ModeToggle />
-            {!linkedDocHook.isActive && <Settings taterMode={taterMode} onTaterModeChange={handleTaterModeChange} onIdentityChange={handleIdentityChange} origin={origin} onUIPreferencesChange={setUiPrefs} />}
-
-            <button
-              onClick={() => setIsPanelOpen(!isPanelOpen)}
-              className={`p-1.5 rounded-md text-xs font-medium transition-all ${
-                isPanelOpen
-                  ? 'bg-primary/15 text-primary'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-              </svg>
-            </button>
-
-            <div className="relative flex" data-export-dropdown>
-              <button
-                onClick={() => { setInitialExportTab(undefined); setShowExport(true); }}
-                className="p-1.5 md:px-2.5 md:py-1 rounded-l-md text-xs font-medium bg-muted hover:bg-muted/80 transition-colors"
-                title="Export"
-              >
-                <svg className="w-4 h-4 md:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-                <span className="hidden md:inline">Export</span>
-              </button>
-              <button
-                onClick={() => setShowExportDropdown(prev => !prev)}
-                className="px-1 md:px-1.5 rounded-r-md text-xs bg-muted hover:bg-muted/80 border-l border-border/50 transition-colors flex items-center"
-                title="Quick save options"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {showExportDropdown && (
-                <div className="absolute top-full right-0 mt-1 w-48 bg-popover border border-border rounded-lg shadow-xl z-50 py-1">
-                  {sharingEnabled && (
-                    <button
-                      onClick={async () => {
-                        setShowExportDropdown(false);
-                        try {
-                          await navigator.clipboard.writeText(shareUrl);
-                          setNoteSaveToast({ type: 'success', message: 'Share link copied' });
-                        } catch {
-                          setNoteSaveToast({ type: 'error', message: 'Failed to copy' });
-                        }
-                        setTimeout(() => setNoteSaveToast(null), 3000);
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted transition-colors flex items-center gap-2"
-                    >
-                      <svg className="w-3.5 h-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                      </svg>
-                      Copy Share Link
-                    </button>
-                  )}
-                  <button
-                    onClick={handleDownloadAnnotations}
-                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted transition-colors flex items-center gap-2"
-                  >
-                    <svg className="w-3.5 h-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Download Annotations
-                  </button>
-                  {isApiMode && isObsidianConfigured() && (
-                    <button
-                      onClick={() => handleQuickSaveToNotes('obsidian')}
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted transition-colors flex items-center gap-2"
-                    >
-                      <svg className="w-3.5 h-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                      </svg>
-                      Save to Obsidian
-                    </button>
-                  )}
-                  {isApiMode && getBearSettings().enabled && (
-                    <button
-                      onClick={() => handleQuickSaveToNotes('bear')}
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted transition-colors flex items-center gap-2"
-                    >
-                      <svg className="w-3.5 h-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                      </svg>
-                      Save to Bear
-                    </button>
-                  )}
-                  {isApiMode && !isObsidianConfigured() && !getBearSettings().enabled && (
-                    <div className="px-3 py-2 text-[10px] text-muted-foreground">
-                      No notes apps configured.
-                    </div>
-                  )}
-                  {sharingEnabled && (
-                    <>
-                      <div className="my-1 border-t border-border" />
-                      <button
-                        onClick={() => {
-                          setShowExportDropdown(false);
-                          setShowImport(true);
-                        }}
-                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted transition-colors flex items-center gap-2"
-                      >
-                        <svg className="w-3.5 h-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                        Import Review
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
-
-        {/* Linked document error banner */}
-        {linkedDocHook.error && (
-          <div className="bg-destructive/10 border-b border-destructive/20 px-4 py-2 flex items-center gap-2 flex-shrink-0">
-            <span className="text-xs text-destructive">{linkedDocHook.error}</span>
-            <button
-              onClick={linkedDocHook.dismissError}
-              className="ml-auto text-xs text-destructive/60 hover:text-destructive"
-            >
-              dismiss
-            </button>
-          </div>
-        )}
-
-        {/* Main Content */}
-        <div className={`flex-1 flex overflow-hidden ${isResizing ? 'select-none' : ''}`}>
-          {/* Left Sidebar: collapsed tab flags (when sidebar is closed) */}
-          {!sidebar.isOpen && (
-            <SidebarTabs
-              activeTab={sidebar.activeTab}
-              onToggleTab={sidebar.toggleTab}
-              hasDiff={planDiff.hasPreviousVersion}
-              className="hidden lg:flex"
-            />
-          )}
-
-          {/* Left Sidebar: open state (TOC or Version Browser) */}
-          {sidebar.isOpen && (
-            <>
-              <SidebarContainer
-                activeTab={sidebar.activeTab}
-                onTabChange={sidebar.toggleTab}
-                onClose={sidebar.close}
-                width={tocResize.width}
-                blocks={blocks}
-                annotations={annotations}
-                activeSection={activeSection}
-                onTocNavigate={handleTocNavigate}
-                linkedDocFilepath={linkedDocHook.filepath}
-                onLinkedDocBack={linkedDocHook.isActive ? linkedDocHook.back : undefined}
-                versionInfo={versionInfo}
-                versions={planDiff.versions}
-                projectPlans={planDiff.projectPlans}
-                selectedBaseVersion={planDiff.diffBaseVersion}
-                onSelectBaseVersion={planDiff.selectBaseVersion}
-                isPlanDiffActive={isPlanDiffActive}
-                hasPreviousVersion={planDiff.hasPreviousVersion}
-                onActivatePlanDiff={() => setIsPlanDiffActive(true)}
-                isLoadingVersions={planDiff.isLoadingVersions}
-                isSelectingVersion={planDiff.isSelectingVersion}
-                fetchingVersion={planDiff.fetchingVersion}
-                onFetchVersions={planDiff.fetchVersions}
-                onFetchProjectPlans={planDiff.fetchProjectPlans}
-              />
-              <ResizeHandle {...tocResize.handleProps} className="hidden lg:block" />
-            </>
-          )}
-
-          {/* Document Area */}
-          <main ref={containerRef} className="flex-1 min-w-0 overflow-y-auto bg-grid">
-            <div className="min-h-full flex flex-col items-center px-4 py-3 md:px-10 md:py-8 xl:px-16">
-              {/* Mode Switcher (hidden during plan diff) */}
-              {!isPlanDiffActive && (
+            <main ref={containerRef} className="flex-1 min-w-0 overflow-y-auto bg-grid">
+              <div className="min-h-full flex flex-col items-center px-4 py-3 md:px-10 md:py-8 xl:px-16">
                 <div className="w-full max-w-[832px] 2xl:max-w-5xl mb-3 md:mb-4 flex justify-start">
-                  <ModeSwitcher mode={editorMode} onChange={handleEditorModeChange} taterMode={taterMode} />
+                  <ModeSwitcher mode={editorMode} onChange={handleEditorModeChange} />
                 </div>
-              )}
 
-              {/* Plan Diff View or Normal Plan View */}
-              {isPlanDiffActive && planDiff.diffBlocks && planDiff.diffStats ? (
-                <PlanDiffViewer
-                  diffBlocks={planDiff.diffBlocks}
-                  diffStats={planDiff.diffStats}
-                  diffMode={planDiffMode}
-                  onDiffModeChange={setPlanDiffMode}
-                  onPlanDiffToggle={() => setIsPlanDiffActive(false)}
+                <Viewer
+                  ref={viewerRef}
+                  blocks={blocks}
+                  markdown={markdown}
+                  frontmatter={frontmatter}
+                  annotations={annotations}
+                  onAddAnnotation={handleAddAnnotation}
+                  onSelectAnnotation={setSelectedAnnotationId}
+                  selectedAnnotationId={selectedAnnotationId}
+                  mode={editorMode}
+                  globalAttachments={globalAttachments}
+                  onAddGlobalAttachment={handleAddGlobalAttachment}
+                  onRemoveGlobalAttachment={handleRemoveGlobalAttachment}
+                  stickyActions={uiPrefs.stickyActionsEnabled}
                   repoInfo={repoInfo}
-                  baseVersionLabel={planDiff.diffBaseVersion != null ? `v${planDiff.diffBaseVersion}` : undefined}
-                  baseVersion={planDiff.diffBaseVersion ?? undefined}
                 />
-              ) : (
-                <>
-                  {(
-                    <Viewer
-                      key={linkedDocHook.isActive ? `doc:${linkedDocHook.filepath}` : 'plan'}
-                      ref={viewerRef}
-                      blocks={blocks}
-                      markdown={markdown}
-                      frontmatter={frontmatter}
-                      annotations={annotations}
-                      onAddAnnotation={handleAddAnnotation}
-                      onSelectAnnotation={setSelectedAnnotationId}
-                      selectedAnnotationId={selectedAnnotationId}
-                      mode={editorMode}
-                      taterMode={taterMode}
-                      globalAttachments={globalAttachments}
-                      onAddGlobalAttachment={handleAddGlobalAttachment}
-                      onRemoveGlobalAttachment={handleRemoveGlobalAttachment}
-                      repoInfo={repoInfo}
-                      stickyActions={uiPrefs.stickyActionsEnabled}
-                      planDiffStats={linkedDocHook.isActive ? null : planDiff.diffStats}
-                      isPlanDiffActive={isPlanDiffActive}
-                      onPlanDiffToggle={() => setIsPlanDiffActive(!isPlanDiffActive)}
-                      hasPreviousVersion={!linkedDocHook.isActive && planDiff.hasPreviousVersion}
-                      onOpenLinkedDoc={linkedDocHook.open}
-                      linkedDocInfo={linkedDocHook.isActive ? { filepath: linkedDocHook.filepath!, onBack: linkedDocHook.back } : null}
-                    />
-                  )}
-                </>
-              )}
-            </div>
-          </main>
+              </div>
+            </main>
 
-          {/* Resize Handle */}
-          {isPanelOpen && <ResizeHandle {...panelResize.handleProps} />}
+            {isPanelOpen && <ResizeHandle {...panelResize.handleProps} />}
 
-          {/* Annotation Panel */}
-          <AnnotationPanel
-            isOpen={isPanelOpen}
-            blocks={blocks}
-            annotations={annotations}
-            selectedId={selectedAnnotationId}
-            onSelect={setSelectedAnnotationId}
-            onDelete={handleDeleteAnnotation}
-            onEdit={handleEditAnnotation}
-            shareUrl={shareUrl}
-            sharingEnabled={sharingEnabled}
-            width={panelResize.width}
+            <AnnotationPanel
+              isOpen={isPanelOpen}
+              blocks={blocks}
+              annotations={annotations}
+              selectedId={selectedAnnotationId}
+              onSelect={setSelectedAnnotationId}
+              onDelete={handleDeleteAnnotation}
+              onEdit={handleEditAnnotation}
+              width={panelResize.width}
+            />
+          </div>
+
+          <ConfirmDialog
+            isOpen={showFeedbackPrompt}
+            onClose={() => setShowFeedbackPrompt(false)}
+            title="Add Annotations First"
+            message={`To provide feedback, select text in the plan and add annotations. ${agentName} will use your annotations to revise the plan.`}
+            variant="info"
+          />
+
+          <ConfirmDialog
+            isOpen={showClaudeCodeWarning}
+            onClose={() => setShowClaudeCodeWarning(false)}
+            onConfirm={() => {
+              setShowClaudeCodeWarning(false);
+              handleApprove();
+            }}
+            title="Annotations Won't Be Sent"
+            message={<>{agentName} does not yet support feedback on approval. Your {annotations.length} annotation{annotations.length !== 1 ? 's' : ''} will be lost.</>}
+            subMessage={
+              <>
+                To send feedback, use <strong>Send Feedback</strong> instead.
+                <br /><br />
+                Want this feature? Upvote these issues:
+                <br />
+                <a href="https://github.com/anthropics/claude-code/issues/16001" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">#16001</a>
+                {' · '}
+                <a href="https://github.com/anthropics/claude-code/issues/15755" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">#15755</a>
+              </>
+            }
+            confirmText="Approve Anyway"
+            cancelText="Cancel"
+            variant="warning"
+            showCancel
+          />
+
+          <CompletionOverlay
+            submitted={submitted}
+            title={
+              submitted === 'approved'
+                ? 'Plan approved ✓ — you can close this tab'
+                : annotateMode
+                  ? 'Annotations Sent'
+                  : 'Plan denied — feedback sent to agent'
+            }
+            subtitle={
+              submitted === 'approved'
+                ? ''
+                : annotateMode
+                  ? `${agentName} will address your annotations on the file.`
+                  : ''
+            }
+            agentLabel={agentName}
+          />
+
+          <ImageAnnotator
+            isOpen={!!pendingPasteImage}
+            imageSrc={pendingPasteImage?.blobUrl ?? ''}
+            initialName={pendingPasteImage?.initialName}
+            onAccept={handlePasteAnnotatorAccept}
+            onClose={handlePasteAnnotatorClose}
           />
         </div>
-
-        {/* Export Modal */}
-        <ExportModal
-          isOpen={showExport}
-          onClose={() => { setShowExport(false); setInitialExportTab(undefined); }}
-          shareUrl={shareUrl}
-          shareUrlSize={shareUrlSize}
-          annotationsOutput={annotationsOutput}
-          annotationCount={annotations.length}
-          taterSprite={taterMode ? <TaterSpritePullup /> : undefined}
-          sharingEnabled={sharingEnabled}
-          markdown={markdown}
-          isApiMode={isApiMode}
-          initialTab={initialExportTab}
-        />
-
-        {/* Import Modal */}
-        <ImportModal
-          isOpen={showImport}
-          onClose={() => setShowImport(false)}
-          onImport={importFromShareUrl}
-          shareBaseUrl={shareBaseUrl}
-        />
-
-        {/* Feedback prompt dialog */}
-        <ConfirmDialog
-          isOpen={showFeedbackPrompt}
-          onClose={() => setShowFeedbackPrompt(false)}
-          title="Add Annotations First"
-          message={`To provide feedback, select text in the plan and add annotations. ${agentName} will use your annotations to revise the plan.`}
-          variant="info"
-        />
-
-        {/* Claude Code annotation warning dialog */}
-        <ConfirmDialog
-          isOpen={showClaudeCodeWarning}
-          onClose={() => setShowClaudeCodeWarning(false)}
-          onConfirm={() => {
-            setShowClaudeCodeWarning(false);
-            handleApprove();
-          }}
-          title="Annotations Won't Be Sent"
-          message={<>{agentName} doesn't yet support feedback on approval. Your {annotations.length} annotation{annotations.length !== 1 ? 's' : ''} will be lost.</>}
-          subMessage={
-            <>
-              To send feedback, use <strong>Send Feedback</strong> instead.
-              <br /><br />
-              Want this feature? Upvote these issues:
-              <br />
-              <a href="https://github.com/anthropics/claude-code/issues/16001" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">#16001</a>
-              {' · '}
-              <a href="https://github.com/anthropics/claude-code/issues/15755" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">#15755</a>
-            </>
-          }
-          confirmText="Approve Anyway"
-          cancelText="Cancel"
-          variant="warning"
-          showCancel
-        />
-
-        {/* OpenCode agent not found warning dialog */}
-        <ConfirmDialog
-          isOpen={showAgentWarning}
-          onClose={() => setShowAgentWarning(false)}
-          onConfirm={() => {
-            setShowAgentWarning(false);
-            handleApprove();
-          }}
-          title="Agent Not Found"
-          message={agentWarningMessage}
-          subMessage={
-            <>
-              You can change the agent in <strong>Settings</strong>, or approve anyway and OpenCode will use the default agent.
-            </>
-          }
-          confirmText="Approve Anyway"
-          cancelText="Cancel"
-          variant="warning"
-          showCancel
-        />
-
-        {/* Save-to-notes toast */}
-        {noteSaveToast && (
-          <div className={`fixed top-16 right-4 z-50 px-3 py-2 rounded-lg text-xs font-medium shadow-lg transition-opacity ${
-            noteSaveToast.type === 'success'
-              ? 'bg-success/15 text-success border border-success/30'
-              : 'bg-destructive/15 text-destructive border border-destructive/30'
-          }`}>
-            {noteSaveToast.message}
-          </div>
-        )}
-
-        {/* Completion overlay - shown after approve/deny */}
-        <CompletionOverlay
-          submitted={submitted}
-          title={
-            submitted === 'approved'
-              ? 'Plan approved ✓ — you can close this tab'
-              : annotateMode
-                ? 'Annotations Sent'
-                : 'Plan denied — feedback sent to agent'
-          }
-          subtitle={
-            submitted === 'approved'
-              ? ''
-              : annotateMode
-                ? `${agentName} will address your annotations on the file.`
-                : ''
-          }
-          agentLabel={agentName}
-        />
-
-        {/* Update notification */}
-        <UpdateBanner origin={origin} />
-
-        {/* Image Annotator for pasted images */}
-        <ImageAnnotator
-          isOpen={!!pendingPasteImage}
-          imageSrc={pendingPasteImage?.blobUrl ?? ''}
-          initialName={pendingPasteImage?.initialName}
-          onAccept={handlePasteAnnotatorAccept}
-          onClose={handlePasteAnnotatorClose}
-        />
-
-        {/* Permission Mode Setup (Claude Code first-time) */}
-        <PermissionModeSetup
-          isOpen={showPermissionModeSetup}
-          onComplete={(mode) => {
-            setPermissionMode(mode);
-            setShowPermissionModeSetup(false);
-            if (needsUIFeaturesSetup()) {
-              setShowUIFeaturesSetup(true);
-            } else if (needsPlanDiffMarketingDialog()) {
-              setShowPlanDiffMarketing(true);
-            }
-          }}
-        />
-
-        {/* UI Features Setup (TOC & Sticky Actions) */}
-        <UIFeaturesSetup
-          isOpen={showUIFeaturesSetup}
-          onComplete={(prefs) => {
-            setUiPrefs(prefs);
-            setShowUIFeaturesSetup(false);
-            if (needsPlanDiffMarketingDialog()) {
-              setShowPlanDiffMarketing(true);
-            }
-          }}
-        />
-
-        {/* Plan Diff Marketing (feature announcement) */}
-        <PlanDiffMarketing
-          isOpen={showPlanDiffMarketing}
-          origin={origin}
-          onComplete={() => {
-            setShowPlanDiffMarketing(false);
-          }}
-        />
-      </div>
       )}
     </ThemeProvider>
   );
