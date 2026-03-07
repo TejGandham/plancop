@@ -1,4 +1,4 @@
-# Plancop
+# Plancop (alpha)
 
 Visual plan review for **Claude Code**. Annotate and review AI agent plans, approve or deny before they execute, and send structured feedback back to the agent — all from a browser UI.
 
@@ -19,7 +19,7 @@ Inspired by [Plannotator](https://github.com/backnotprop/plannotator), Plancop b
 
 When Claude Code exits plan mode and presents its plan:
 
-1. Plancop's `ExitPlanMode` hook intercepts the plan
+1. Plancop's `PermissionRequest` hook matches the `ExitPlanMode` event
 2. A browser UI opens with the proposed plan
 3. You review, annotate, and **approve** or **deny**
 4. Your decision and annotations are sent back to the agent
@@ -29,7 +29,7 @@ When Claude Code exits plan mode and presents its plan:
 ### Prerequisites
 
 - [Bun](https://bun.sh/) 1.x+
-- npm (for UI dependencies)
+- [Node.js](https://nodejs.org/) 22+ (for MCP server and npm)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 
 ### 1. Install plancop (once)
@@ -56,21 +56,24 @@ Create `.github/hooks/plancop.json`:
 
 ```json
 {
-  "hooks": [
-    {
-      "matcher": "ExitPlanMode",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "bun run ~/tools/plancop/server/index.ts"
-        }
-      ]
-    }
-  ]
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run ~/tools/plancop/server/index.ts",
+            "timeout": 345600
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
-Adjust the path to wherever you cloned plancop.
+Adjust the path to wherever you cloned plancop. The timeout (in ms) gives you ~5.7 minutes to review.
 
 ### 3. Use it
 
@@ -137,7 +140,7 @@ npm run lint         # Type check (tsc --noEmit)
 
 ```
 Claude Code
-    ↓ ExitPlanMode hook
+    ↓ PermissionRequest hook (matcher: ExitPlanMode)
 stdin (JSON) → server/index.ts (Bun.serve, auto-assigned port)
     ↓ serves
 Browser UI (React + Vite, single-file build)
