@@ -6,3 +6,7 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 *.log
+
+.letta/
+.sisyphus/
+plancop-qa-full.png
