@@ -35,77 +35,12 @@ EOF
 # 3. Use Claude Code as usual — plancop opens when the agent presents a plan
 ```
 
-## Features
-
-| Feature | Description |
-|---------|-------------|
-| **Visual Plan Review** | Approve or deny agent plans with inline annotations |
-| **Annotations** | Delete, insert, replace, or comment on specific lines |
-| **Dark Mode** | System-aware theme switching |
-
 ## How It Works
 
-When Claude Code exits plan mode and presents its plan:
-
-1. Plancop's `PermissionRequest` hook matches the `ExitPlanMode` event
-2. A browser UI opens with the proposed plan
-3. You review, annotate, and **approve** or **deny**
-4. Your decision and annotations are sent back to the agent
-
-## Install
-
-### Prerequisites
-
-- [Bun](https://bun.sh/) 1.x+
-- [Node.js](https://nodejs.org/) 22+ (for MCP server and npm)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-
-### 1. Install plancop (once)
-
-```bash
-git clone https://github.com/TejGandham/plancop.git ~/tools/plancop
-cd ~/tools/plancop
-npm install
-cd ui && npm install && cd ..
-npm run build
-```
-
-You can clone it anywhere. Remember the path — you'll use it in step 2.
-
-### 2. Add to any repo
-
-Claude Code loads hooks from `.github/hooks/` in your project. For each repo where you want plan review:
-
-```bash
-mkdir -p .github/hooks
-```
-
-Create `.github/hooks/plancop.json`:
-
-```json
-{
-  "hooks": {
-    "PermissionRequest": [
-      {
-        "matcher": "ExitPlanMode",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun run ~/tools/plancop/server/index.ts",
-            "timeout": 345600
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Adjust the path to wherever you cloned plancop. The timeout (in ms) gives you ~5.7 minutes to review.
-
-### 3. Use it
-
-Start a Claude Code session. When the agent exits plan mode, plancop intercepts and opens the review UI.
+1. Claude Code exits plan mode → plancop's `PermissionRequest` hook intercepts
+2. Browser UI opens with the proposed plan
+3. You annotate (delete, insert, replace, comment), then **approve** or **deny**
+4. Your decision + annotations go back to the agent
 
 ### Keyboard Shortcuts
 
@@ -115,6 +50,17 @@ Start a Claude Code session. When the agent exits plan mode, plancop intercepts 
 | `Cmd/Ctrl+Shift+Enter` | Send feedback / deny |
 | `Escape` | Close modal or cancel annotation |
 
+## Install
+
+### Prerequisites
+
+- [Bun](https://bun.sh/) 1.x+
+- [Node.js](https://nodejs.org/) 22+ (for MCP server and npm)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+
+See the [TL;DR](#tldr) above for the full install in one copy-paste block.
+
+Adjust `~/tools/plancop` to wherever you cloned it. The timeout (345600ms) gives you ~5.7 minutes to review.
 ## MCP Setup
 
 Plancop also works as a standalone MCP server for **OpenCode**, **Claude Desktop**, and other MCP clients.
@@ -190,13 +136,6 @@ stdout (PermissionRequest JSON) → Claude Code
 
 **Annotations not saved** — You must click "Approve" or "Send Feedback". Closing the browser discards changes.
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Commit your changes
-4. Open a Pull Request
-
 ## License
 
-MIT — See LICENSE file for details.
+MIT
