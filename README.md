@@ -56,46 +56,9 @@ EOF
 
 - [Bun](https://bun.sh/) 1.x+
 - [Node.js](https://nodejs.org/) 22+ (for MCP server and npm)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
 
 See the [TL;DR](#tldr) above for the full install in one copy-paste block.
 
-Adjust `~/tools/plancop` to wherever you cloned it. The timeout (345600ms) gives you ~5.7 minutes to review.
-## MCP Setup
-
-Plancop also works as a standalone MCP server for **OpenCode**, **Claude Desktop**, and other MCP clients.
-
-### OpenCode
-
-Add to `opencode.json` (project root or `~/.config/opencode/opencode.json`):
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "plancop": {
-      "type": "local",
-      "command": ["node", "~/tools/plancop/mcp/server.js"],
-      "enabled": true
-    }
-  }
-}
-```
-
-### Claude Desktop
-
-Add `.mcp.json` to your project root:
-
-```json
-{
-  "mcpServers": {
-    "plancop": {
-      "command": "node",
-      "args": ["~/tools/plancop/mcp/server.js"]
-    }
-  }
-}
-```
 
 ## Development
 
