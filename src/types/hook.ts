@@ -1,8 +1,13 @@
 /**
- * ExitPlanMode hook types for Claude Code PermissionRequest.
+ * Hook types for plan review integration.
  *
- * Input (stdin):  { tool_input: { plan: "..." }, permission_mode?: "..." }
- * Output (stdout): { hookSpecificOutput: { hookEventName, decision: { behavior, message? } } }
+ * Supports two agent CLIs:
+ * - Claude Code: ExitPlanMode PermissionRequest hook
+ *   Input:  { tool_input: { plan: "..." }, permission_mode?: "..." }
+ *   Output: { hookSpecificOutput: { hookEventName, decision: { behavior, message? } } }
+ * - Copilot CLI: preToolUse hook intercepting exit_plan_mode
+ *   Input:  { toolName: "exit_plan_mode", toolArgs: "...", cwd: "...", timestamp: ... }
+ *   Output: { permissionDecision: "allow"|"deny", permissionDecisionReason?: "..." }
  */
 
 /** stdin JSON from Claude Code ExitPlanMode PermissionRequest hook */
@@ -29,4 +34,27 @@ export function isValidExitPlanModeInput(value: unknown): value is ExitPlanModeI
   if (typeof toolInput !== "object" || toolInput === null) return false;
   const ti = toolInput as Record<string, unknown>;
   return typeof ti.plan === "string";
+}
+
+// --- Copilot CLI types ---
+
+/** stdin JSON from Copilot CLI preToolUse hook */
+export interface CopilotPreToolUseInput {
+  timestamp: number;
+  cwd: string;
+  toolName: string;
+  toolArgs: string;
+}
+
+/** stdout JSON response for Copilot CLI preToolUse hook */
+export interface CopilotPermissionOutput {
+  permissionDecision: "allow" | "deny";
+  permissionDecisionReason?: string;
+}
+
+/** Type guard: validates that a value is a Copilot CLI preToolUse event */
+export function isCopilotPreToolUseInput(value: unknown): value is CopilotPreToolUseInput {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.toolName === "string" && typeof v.cwd === "string";
 }

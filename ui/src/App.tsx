@@ -270,7 +270,7 @@ const App: React.FC = () => {
   const [editorMode, setEditorMode] = useState<EditorMode>(getEditorMode);
   const [uiPrefs, setUiPrefs] = useState<UIPreferences>(getUIPreferences);
   const [isApiMode, setIsApiMode] = useState(false);
-  const [origin, setOrigin] = useState<'claude-code' | 'opencode' | 'pi' | null>(null);
+  const [origin, setOrigin] = useState<'claude-code' | 'copilot-cli' | 'opencode' | 'pi' | null>(null);
   const [globalAttachments, setGlobalAttachments] = useState<ImageAttachment[]>([]);
   const [annotateMode, setAnnotateMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -317,7 +317,7 @@ const App: React.FC = () => {
 
     const applyPlanData = (data: {
       plan: string;
-      origin?: 'claude-code' | 'opencode' | 'pi';
+      origin?: 'claude-code' | 'copilot-cli' | 'opencode' | 'pi';
       mode?: 'annotate';
       repoInfo?: { display: string; branch?: string };
     }) => {
@@ -611,6 +611,7 @@ const App: React.FC = () => {
   const agentName = useMemo(() => {
     if (origin === 'opencode') return 'OpenCode';
     if (origin === 'claude-code') return 'Claude Code';
+    if (origin === 'copilot-cli') return 'Copilot CLI';
     if (origin === 'pi') return 'Pi';
     return 'Coding Agent';
   }, [origin]);
@@ -636,9 +637,11 @@ const App: React.FC = () => {
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium hidden md:inline ${
                   origin === 'claude-code'
                     ? 'bg-orange-500/15 text-orange-400'
-                    : origin === 'pi'
-                      ? 'bg-violet-500/15 text-violet-400'
-                      : 'bg-zinc-500/20 text-zinc-400'
+                    : origin === 'copilot-cli'
+                      ? 'bg-blue-500/15 text-blue-400'
+                      : origin === 'pi'
+                        ? 'bg-violet-500/15 text-violet-400'
+                        : 'bg-zinc-500/20 text-zinc-400'
                 }`}>
                   {agentName}
                 </span>

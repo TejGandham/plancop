@@ -1,12 +1,16 @@
 /**
- * Plancop — ExitPlanMode hook server
+ * Plancop — plan review hook server
  *
- * Reads hook event from stdin (PermissionRequest / ExitPlanMode),
- * starts a Bun HTTP server with the review UI, waits for user
- * decision (approve/deny), outputs the result to stdout.
+ * Supports two agent CLIs:
+ * - Claude Code: ExitPlanMode PermissionRequest hook
+ *   Input (stdin):  { tool_input: { plan: "..." }, permission_mode?: "..." }
+ *   Output (stdout): { hookSpecificOutput: { hookEventName: "PermissionRequest", decision } }
+ * - Copilot CLI: preToolUse hook intercepting exit_plan_mode
+ *   Input (stdin):  { toolName: "exit_plan_mode", toolArgs: "...", cwd: "...", timestamp: ... }
+ *   Output (stdout): { permissionDecision: "allow"|"deny", permissionDecisionReason?: "..." }
  *
- * Input (stdin):  { tool_input: { plan: "..." }, permission_mode?: "..." }
- * Output (stdout): { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior, message? } } }
+ * Reads hook event from stdin, starts a Bun HTTP server with the review UI,
+ * waits for user decision (approve/deny), outputs the result to stdout.
  */
 
 import { readFileSync, existsSync } from "node:fs";
@@ -14,15 +18,13 @@ import { resolve } from "node:path";
 
 // --- Types ---
 
-interface HookEvent {
-  tool_input: { plan: string };
-  permission_mode?: string;
-}
+type Source = "claude-code" | "copilot-cli";
 
 // --- Read stdin ---
 
 const eventJson = await Bun.stdin.text();
 
+let source: Source = "claude-code";
 let plan = "";
 let permissionMode = "default";
 
@@ -30,15 +32,47 @@ try {
   const event: unknown = JSON.parse(eventJson);
   if (event && typeof event === "object") {
     const e = event as Record<string, unknown>;
-    const toolInput = e.tool_input;
-    if (toolInput && typeof toolInput === "object") {
-      const ti = toolInput as Record<string, unknown>;
+
+    if (typeof e.toolName === "string") {
+      // --- Copilot CLI preToolUse hook ---
+      source = "copilot-cli";
+
+      // Fast path: allow all non-exit_plan_mode tool calls immediately
+      if (e.toolName !== "exit_plan_mode") {
+        process.exit(0);
+      }
+
+      // Read plan from plan file in cwd
+      const cwd = typeof e.cwd === "string" ? e.cwd : process.cwd();
+      const planPaths = ["plan-01.md", "plan.md"];
+      for (const filename of planPaths) {
+        const planPath = resolve(cwd, filename);
+        if (existsSync(planPath)) {
+          try {
+            plan = readFileSync(planPath, "utf8");
+            break;
+          } catch {}
+        }
+      }
+
+      // Fallback: try to extract plan from toolArgs
+      if (!plan && typeof e.toolArgs === "string") {
+        try {
+          const args = JSON.parse(e.toolArgs) as Record<string, unknown>;
+          if (typeof args.plan === "string") plan = args.plan;
+          else if (typeof args.content === "string") plan = args.content;
+        } catch {}
+      }
+    } else if (e.tool_input && typeof e.tool_input === "object") {
+      // --- Claude Code ExitPlanMode PermissionRequest hook ---
+      source = "claude-code";
+      const ti = e.tool_input as Record<string, unknown>;
       if (typeof ti.plan === "string") {
         plan = ti.plan;
       }
-    }
-    if (typeof e.permission_mode === "string") {
-      permissionMode = e.permission_mode;
+      if (typeof e.permission_mode === "string") {
+        permissionMode = e.permission_mode;
+      }
     }
   }
 } catch {
@@ -47,6 +81,12 @@ try {
 }
 
 if (!plan) {
+  if (source === "copilot-cli") {
+    // No plan file found — allow exit_plan_mode to proceed without review
+    console.error("plancop: no plan file found in cwd, allowing exit_plan_mode");
+    console.log(JSON.stringify({ permissionDecision: "allow" }));
+    process.exit(0);
+  }
   console.error("plancop: no plan content in hook event");
   process.exit(1);
 }
@@ -104,7 +144,7 @@ const server = Bun.serve({
     if (req.method === "GET" && url.pathname === "/api/plan") {
       return Response.json({
         plan,
-        origin: "claude-code",
+        origin: source,
         permissionMode,
       });
     }
@@ -181,29 +221,44 @@ if (!shuttingDown) {
 
 server.stop();
 
-// --- Output PermissionRequest decision ---
+// --- Output decision ---
 
-if (result.approved) {
-  console.log(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PermissionRequest",
-        decision: { behavior: "allow" },
-      },
-    })
-  );
+if (source === "copilot-cli") {
+  // Copilot CLI permissionDecision format
+  if (result.approved) {
+    console.log(JSON.stringify({ permissionDecision: "allow" }));
+  } else {
+    console.log(
+      JSON.stringify({
+        permissionDecision: "deny",
+        permissionDecisionReason: result.feedback || "Plan changes requested",
+      })
+    );
+  }
 } else {
-  console.log(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PermissionRequest",
-        decision: {
-          behavior: "deny",
-          message: result.feedback || "Plan changes requested",
+  // Claude Code PermissionRequest format
+  if (result.approved) {
+    console.log(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PermissionRequest",
+          decision: { behavior: "allow" },
         },
-      },
-    })
-  );
+      })
+    );
+  } else {
+    console.log(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PermissionRequest",
+          decision: {
+            behavior: "deny",
+            message: result.feedback || "Plan changes requested",
+          },
+        },
+      })
+    );
+  }
 }
 
 process.exit(0);

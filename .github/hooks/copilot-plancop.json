@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "bun run ~/tools/plancop/server/index.ts",
+        "timeoutSec": 345600,
+        "comment": "Intercept exit_plan_mode to review plans in browser UI"
+      }
+    ]
+  }
+}
