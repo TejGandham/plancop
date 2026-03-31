@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "plancop": {
-      "command": "node",
-      "args": ["mcp/server.js"]
-    }
-  }
-}
